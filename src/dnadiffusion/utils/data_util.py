@@ -1,4 +1,5 @@
 import os
+from typing import Optional
 
 import gtfparse
 import matplotlib.pyplot as plt
@@ -98,9 +99,19 @@ class SEQ_EXTRACT:
         return self.data.query(f'TAG == "{tag}" and CELL_TYPE == "{cell_type}" ').copy()
 
 
-def seq_extract(data_path: str, tag: str, cell_type: str):
+def seq_extract(data_path: str, tag: str, cell_type: Optional[str] = None):
     df = pd.read_csv(data_path, sep="\t")
+    if cell_type is None:
+        return df.query(f'TAG == "{tag}"')
     return df.query(f'TAG == "{tag}" and CELL_TYPE == "{cell_type}" ')
+
+
+def write_fasta_blat(df: pd.DataFrame, fasta_file_name: str):
+    with open(fasta_file_name, "w") as f:
+        max_rows = len(df)
+        for i in range(max_rows):
+            f.write(f">{df.iloc[i]['ID']}\n{df.iloc[i]['SEQUENCE']}\n")
+    f.close()
 
 
 class GTFProcessing:
