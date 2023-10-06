@@ -18,7 +18,7 @@ from .enformer_utils import one_hot_encode
 class EnformerData:
     tracks: List
     input_sequences_file_path: List
-    interval_list: list
+    interval_list: List
     capture_bigwig_names: bool
     full_generated_range_start: int
     full_generated_range_end: int
@@ -280,7 +280,7 @@ class EnformerOps(EnformerData):
             dict: A dictionary containing the name, path, format, display mode, and color of the track.
         """
 
-        chr_name, start, end = self.capture_full_cords()
+        chr_name, start, end = self.full_generated_chr, self.full_generated_range_start, self.full_generated_range_end
         t_name = f"{name}_minimal.bw"
         with open(t_name, 'w') as f:
             pass
@@ -311,8 +311,33 @@ class EnformerOps(EnformerData):
             "height": 100,
         }
 
-    def capture_full_cords(self):
-        if self.full_generated_range_start:
-            return self.full_generated_chr, self.full_generated_range_start, self.full_generated_range_end
-        else:
-            print('Run generate_plot_number before it')
+    def tiling(self, interval_to_window: List[int], window: int = 2000, slice: int = 200):
+        slice_len = int(((interval_to_window[2] + window) - (interval_to_window[1] - window)) / slice)
+        start_slice = interval_to_window[1] - window
+        slices_position = [
+            [interval_to_window[0], start_slice + (slice * n), start_slice + ((slice * n) + slice)]
+            for n in range(slice_len)
+        ]
+        return slices_position
+
+    def generate_tiling(self, model: tf.Module, coord_to_tile: List[int], gata_gene_region: List[int]):
+        tiling_coords = self.tiling(coord_to_tile, window=2000)
+        regions_capture = []
+
+        t_name = "tiling_vis_" + str(coord_to_tile[1]) + "_" + str(coord_to_tile[2]) + ".bw"
+        if os.path.exists(t_name):
+            os.remove(t_name)
+        with open(t_name, 'w') as f:
+            pass
+        bw_insert = pyBigWig.open(t_name, "w")
+        bw_insert.addHeader([(chr, coord) for chr, coord in self.df_sizes.values])
+
+        for t in tqdm(tiling_coords):
+            bw_list = self.generate_plot_number(model, 120, 1, interval_list=t, show_track=False)
+            return_bw_by_tile = self.extract_from_position(gata_gene_region)
+            mean_values_region_cage = np.mean(return_bw_by_tile[1]['values']).astype(np.int64) + 0.0
+            bw_insert.addEntries(t[0], [t[1]], values=[mean_values_region_cage], span=200)
+            regions_capture.append(mean_values_region_cage)
+
+        bw_insert.close()
+        return regions_capture
