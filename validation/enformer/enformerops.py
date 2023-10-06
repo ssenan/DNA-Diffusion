@@ -1,29 +1,36 @@
 import os
-from typing import List
+from dataclasses import dataclass
+from typing import Dict, List
 
+import igv_notebook
 import kipoiseq
 import numpy as np
 import pandas as pd
 import pyBigWig
+import tensorflow as tf
 from tqdm import tqdm
 
 from .enformer import FastaStringExtractor
 from .enformer_utils import one_hot_encode
 
 
-class EnformerOps:
-    def __init__(self):
-        self.df_sizes = pd.read_table('data/hg38.chrom.sizes', header=None).head(22)
-        self.fasta_extractor = FastaStringExtractor('data/genome.fa')
-        self.tracks = []
-        self.input_sequences_file_path = None
-        self.interval_list = None
-        self.capture_bigwig_names = None
-        self.full_generated_range_start = None
-        self.full_generated_range_end = None
-        self.loaded_seqs = None
+@dataclass
+class EnformerData:
+    tracks: List
+    input_sequences_file_path: List
+    interval_list: list
+    capture_bigwig_names: bool
+    full_generated_range_start: int
+    full_generated_range_end: int
+    loaded_seqs: List
 
-    def add_track(self, track):
+
+class EnformerOps(EnformerData):
+    def __init__(self):
+        self.df_sizes: pd.DataFrame = pd.read_table('data/hg38.chrom.sizes', header=None).head(22)
+        self.fasta_extractor: FastaStringExtractor = FastaStringExtractor('data/genome.fa')
+
+    def add_track(self, additional_tracks: Dict | List[Dict]):
         """
         Adds a track to the list of tracks to be visualized.
 
@@ -32,7 +39,12 @@ class EnformerOps:
             Should have the keys "name", "file", "color", "type", and "id"
             (if type is "enformer").
         """
-        self.tracks.append(track)
+        if type(additional_tracks) == dict:
+            self.tracks.append(additional_tracks)
+        elif type(additional_tracks) == list:
+            self.tracks.extend(additional_tracks)
+        else:
+            raise TypeError("add_track must be of type dict or list")
 
     def remove_track(self, track_key):
         """
@@ -46,29 +58,28 @@ class EnformerOps:
             self.tracks.remove(track_key)
         elif type(track_key) == list:
             for key in track_key:
-                self.tracks.remove(track_key)
+                self.tracks.remove(key)
         else:
             raise TypeError("track_key must be of type str or list")
 
-    def load_data(self, input_sequences_file_path):
-        if type(input_sequences_file_path) == list:
-            self.loaded_seqs = [[x] for x in input_sequences_file_path]
-            self.input_sequences_file_path = input_sequences_file_path
+    def load_data(self, input_sequence_path: List[str] | str):
+        if type(input_sequence_path) == list:
+            self.loaded_seqs = [[x] for x in input_sequence_path]
+            self.input_sequences_file_path = input_sequence_path
+        else:
+            TypeError("input_sequence_path must be of type list")
 
     def generate_plot_number(
         self,
-        model,
-        sequence_number_thousand,
-        step=-1,
-        interval_list=None,
-        show_track=True,
-        capture_bigwig_names=True,
-        wildtype=False,
-        insert_seq_directly=False,
-        modify_prefix='',
-        fasta_file="data/genome.fa",
-        sequence_length=393216,
-        replace_and_remove_region: bool = False,
+        model: tf.Module,
+        sequence_number_thousand: int,
+        step: int = -1,
+        interval_list: List | None = None,
+        show_track: bool = False,
+        wildtype: bool = False,
+        modify_prefix: str = "",
+        sequence_length: int = 393216,
+        replace_remove_region: bool = False,
     ):
         """
         Generates IGV tracks for a given sequence in a diffusion dataset.
@@ -91,90 +102,81 @@ class EnformerOps:
             for the final visualization. Default is True.
 
             wildtype (bool, False)
-            Dont insert and capture the wildtype sequence
+            Don't insert and capture the wildtype sequence
+
         Returns:
             list: A list with the name of all bigwig files generated.
         """
-        capture_bigwig_names = []  # return the name of all bigwig
-        USE_INTERVAL = interval_list
+        # List to capture all bigwig files generated
+        bigwig_names = []
         if not interval_list:
-            USE_INTERVAL = self.interval_list  # this should be your 200 bp region
+            interval_list = self.interval_list
 
-        if USE_INTERVAL is None:
-            raise ValueError("Interval list must be specified.")
+        # Get the sequences and target interval
+        seqs_test = self.loaded_seqs[sequence_number_thousand]
+        target_interval = kipoiseq.Interval(*interval_list)
+        difference = 0
 
-        all_seqs_test = self.loaded_seqs[sequence_number_thousand]
-
-        target_interval = kipoiseq.Interval(USE_INTERVAL[0], USE_INTERVAL[1], USE_INTERVAL[2])
-        difference_use = 0
-
-        if replace_and_remove_region:
+        if replace_remove_region:
             seq_overwrite = self.fasta_extractor.extract(target_interval)
-            len_seq_adding = len(all_seqs_test[step])
-            # seq_insert = 'A' * 200
-            # len_seq_adding =  len(seq_insert)
-            difference = int(round((len(seq_overwrite) - len_seq_adding) / 2))
-            add_nt = 1
-            if (len_seq_adding % 4) != 0:
-                add_nt = -1
-            # difference_use = (difference*2) + 1
-            difference_use = (difference * 2) + add_nt
-
+            len_seq_add = len(seqs_test[step])
+            difference = int(round((len(seq_overwrite) - len_seq_add) / 2))
+            add_nucleotide = 1
+            if len_seq_add % 4 != 0:
+                add_nucleotide = -1
+            difference = (difference * 2) + add_nucleotide
         chr_test = target_interval.resize(sequence_length).chr
         start_test = target_interval.resize(sequence_length).start
         end_test = target_interval.resize(sequence_length).end
 
-        if replace_and_remove_region:
-            seq_to_mod = self.fasta_extractor.extract(target_interval.resize(sequence_length + difference_use))
-            SEQ_IN = seq_to_mod.replace(seq_overwrite, all_seqs_test[step])
-
+        if replace_remove_region:
+            seq_to_modify = self.fasta_extractor.extract(target_interval.resize(sequence_length))
+            seq_input = seq_to_modify.replace(seq_overwrite, seqs_test[step])
         else:
-            seq_to_mod = self.fasta_extractor.extract(target_interval.resize(sequence_length))
-            SEQ_IN = self.insert_seq(all_seqs_test[step], seq_to_mod, dont_insert=wildtype)  # JUST THE LAST
+            seq_to_modify = self.fasta_extractor.extract(target_interval.resize(sequence_length))
+            seq_input = self.insert_seq(seqs_test[step], seq_to_modify, dont_insert=wildtype)
 
-        predictions = self.predict_from_sequence(model, SEQ_IN)
-
-        mod_start = int(start_test + ((end_test - start_test) / 2)) - int(114688 / 2)
-        mod_end = int(start_test + ((end_test - start_test) / 2)) + int(114688 / 2)
+        predictions = self.predict_from_sequence(model, seq_input)
+        mod_start = int(start_test + ((end_test - start_test) / 2) - int(114688 / 2))
+        mod_end = int(start_test + ((end_test - start_test) / 2) + int(114688 / 2))
 
         self.full_generated_range_start = mod_start
         self.full_generated_range_end = mod_end
         self.full_generated_chr = chr_test
 
+        if show_track:
+            igv_notebook.init()
+            b = igv_notebook.Browser(
+                {
+                    "genome": "hg38",
+                    "locus": f"{chr_test}:{mod_start}-{mod_end}",
+                }
+            )
+
         for track in self.tracks:
-            # print (track)
-            if track['type'] == 'enformer':
-                id = track['id']
-                n = modify_prefix + track['name']
-                lg = track['log']
+            if track["type"] == "enformer":
+                id = track["id"]
+                n = modify_prefix + track["name"]
+                lg = track["log"]
 
                 p_values = predictions[:, id]
                 if lg == True:
                     p_values = np.log10(1 + predictions[:, id])
-                capture_bigwig_names.append(n + '.bw')
-                out_track = self._enformer_bigwig_creation(
-                    chr_test, mod_start, p_values, n
-                )  # change this pretiction t/name for a real thing
+                bigwig_names.append(n + ".bw")
+                out_track = self._enformer_bigwig_creation(chr_test, mod_start, p_values, n)
                 if show_track:
                     b.load_track(out_track)
 
-            elif track['type'] == 'real':
-                n = track['name']
-                f = modify_prefix + track['file']
-                c = track['color']
-                capture_bigwig_names.append(f)
+            elif track["type"] == "real":
+                n = track["name"]
+                f = modify_prefix + track["file"]
+                c = track["color"]
+                bigwig_names.append(f)
                 if show_track:
                     b.load_track(self._generate_real_tracks(n, f, c))
 
-        self.capture_bigwig_names = capture_bigwig_names
-
-        return capture_bigwig_names
-
-    def capture_full_cords(self):
-        if self.full_generated_range_start:
-            return self.full_generated_chr, self.full_generated_range_start, self.full_generated_range_end
-        else:
-            print('Run generate_plot_number before it')
+        self.bigwig_names = bigwig_names
+        return bigwig_names
 
     def extract_from_position(self, position, as_dataframe=False):
         """
@@ -194,7 +196,7 @@ class EnformerOps:
 
         results = []
 
-        for name in self.capture_bigwig_names:
+        for name in self.bigwig_names:
             bw = pyBigWig.open(name)
             values = bw.values(position[0], position[1], position[2])
             results.append({'name': name, 'values': values})
@@ -309,45 +311,8 @@ class EnformerOps:
             "height": 100,
         }
 
-    def tiling(self, interval_to_window, window=2000, slice=200):
-        slice_len = int(((interval_to_window[2] + window) - (interval_to_window[1] - window)) / slice)
-        start_slice = interval_to_window[1] - window
-        slices_position = [
-            [interval_to_window[0], start_slice + (slice * n), start_slice + ((slice * n) + slice)]
-            for n in range(slice_len)
-        ]
-        return slices_position
-
-    def generate_tiling(self, coord_to_tile, gata_gene_region):
-        tiling_coords = self.tiling(coord_to_tile, window=2000)
-        regions_capture = []
-
-        t_name = "tiling_vis_" + str(coord_to_tile[1]) + "_" + str(coord_to_tile[2]) + ".bw"
-        if os.path.exists(t_name):
-            os.remove(t_name)
-        with open(t_name, 'w') as f:
-            pass
-        bw_insert = pyBigWig.open(t_name, "w")
-        bw_insert.addHeader([(chr, coord) for chr, coord in self.df_sizes.values])
-
-        for t in tqdm(tiling_coords):
-            bw_list = self.generate_plot_number(120, 1, interval_list=t, show_track=False)
-            return_bw_by_tile = self.extract_from_position(gata_gene_region)
-            mean_values_region_cage = np.mean(return_bw_by_tile[1]['values']).astype(np.int64) + 0.0
-            bw_insert.addEntries(t[0], [t[1]], values=[mean_values_region_cage], span=200)
-            regions_capture.append(mean_values_region_cage)
-
-        bw_insert.close()
-        return regions_capture
-
-
-class SEQ_EXTRACT:
-    def __init__(self, data):
-        self.data = pd.read_csv(data, sep='\t')
-
-    def extract_seq(self, tag, cell_type):
-        return self.data.query(f'TAG == "{tag}" and CELL_TYPE	 == "{cell_type}" ').copy()
-
-    def __repr__(self):
-        display(self.data.groupby(['TAG', 'CELL_TYPE']).count())
-        return 'Data structure'
+    def capture_full_cords(self):
+        if self.full_generated_range_start:
+            return self.full_generated_chr, self.full_generated_range_start, self.full_generated_range_end
+        else:
+            print('Run generate_plot_number before it')
