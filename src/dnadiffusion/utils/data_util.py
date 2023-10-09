@@ -98,8 +98,10 @@ class SEQ_EXTRACT:
         return self.data.query(f'TAG == "{tag}" and CELL_TYPE == "{cell_type}" ').copy()
 
 
-def seq_extract(data_path: str, tag: str, cell_type: str):
+def seq_extract(data_path: str, tag: str, cell_type: str | None = None):
     df = pd.read_csv(data_path, sep="\t")
+    if cell_type is None:
+        return df.query(f'TAG == "{tag}"')
     return df.query(f'TAG == "{tag}" and CELL_TYPE == "{cell_type}" ')
 
 
