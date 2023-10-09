@@ -72,7 +72,7 @@ class EnformerOps(EnformerData):
         model: Enformer,
         sequence_number_thousand: int,
         step: int = -1,
-        interval_list: List | None = None,
+        interval_list: str | List[str] | None = None,
         show_track: bool = False,
         wildtype: bool = False,
         modify_prefix: str = "",

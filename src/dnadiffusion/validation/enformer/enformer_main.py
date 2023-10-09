@@ -1,6 +1,6 @@
 import os
-from typing import List
 import pickle
+from typing import List
 
 import pandas as pd
 from tqdm import tqdm
@@ -15,16 +15,17 @@ os.environ['TF_XLA_FLAGS'] = '--tf_xla_auto_jit=2'
 class RunEnformerBase:
     def __init__(
         self,
-        region: str,
         tag: str,
         cell_type: str,
         sequence_path: str = 'data/EXPANDED_AXIN2_GM_MASTER_DNA_DIFFUSION_ALL_SEQS.txt',
         model_path: str = 'https://tfhub.dev/deepmind/enformer/1',
         modify_prefix: str = '1_',
+        region: str | None = None,
     ):
         self.model = Enformer(model_path)
         self.eops = EnformerOps()
-        self.tag = tag
+        self.sequence_path = sequence_path
+        self.region = region
         self.modify_prefix = modify_prefix
 
         # Loading selected sequences into enformer helper class
@@ -39,7 +40,6 @@ class RunEnformerBase:
         all_sequences = seq_extract(sequence_path, region)
         # Selecting columns of interest
         self.all_sequences = all_sequences[["chrom", "start", "end", "ID"]].values.tolist()
-        self.all_sequences = self.all_sequences[:20]
 
     def extract_dnase(self):
         captured_values = []
@@ -64,29 +64,32 @@ class RunEnformerBase:
         df_out = pd.DataFrame([x.values.tolist() for x in captured_values], columns=out_in.index)
 
         # Save output
-        print(f"Saving output to dnase_{self.tag}_seqs.txt")
-        df_out.to_csv(f"dnase_{self.tag}_seqs.txt", sep="\t", index=False)
+        print(f"Saving output to dnase_{self.region}_seqs.txt")
+        df_out.to_csv(f"dnase_{self.region}_seqs.txt", sep="\t", index=False)
 
 
 class GeneratedEnformer(RunEnformerBase):
     def __init__(
         self,
-        region: str,
         tag: str,
         cell_type: str,
-        enhancer_region: str = "chr17_65563685_65564346",
-        gene_region: List[str] = ['chr17', "65559702", "65560101"],
+        enhancer_region: List[str | int] = ["chr17", 65563685, 65564346],
+        gene_region: List[str | int] = ["chr17", 65559702, 65560101],
         save_interval: int = 10,
     ):
-        super().__init__(region, tag, cell_type)
+        super().__init__(tag, cell_type)
         self.enhancer_region = enhancer_region
         self.gene_region = gene_region
         self.save_interval = save_interval
 
+        all_sequences = seq_extract(self.sequence_path, tag, cell_type)
+        generated_seqs = all_sequences[all_sequences["TAG"] == "GENERATED"]
+        self.all_sequences = generated_seqs[["SEQUENCE", "ID"]].values.tolist()
+
     def extract_dnase(self):
         captured_values = []
         captured_values_target = []
-        for i, s in enumerate(self.all_sequences):
+        for i, s in tqdm(enumerate(self.all_sequences)):
             try:
                 s_in = s[1]
                 id_seq = s[0]
@@ -94,7 +97,7 @@ class GeneratedEnformer(RunEnformerBase):
                 list_bw = self.eops.generate_plot_number(
                     self.model,
                     -1,
-                    interval_list=[self.enhancer_region, self.gene_region],
+                    interval_list=self.enhancer_region,
                     wildtype=False,
                     show_track=False,
                     modify_prefix=self.modify_prefix,
@@ -103,13 +106,13 @@ class GeneratedEnformer(RunEnformerBase):
                 continue
 
             try:
-                out_in = self.eops.extract_from_position(s_in, as_dataframe=True)
+                out_in = self.eops.extract_from_position(self.enhancer_region, as_dataframe=True)
                 out_in = out_in.mean()
-                out_in["SEQ_ID"] = id_seq
+                out_in["SEQ_ID"] = s_in
                 out_in["TARGET_NAME"] = "ENH_GATA1"
                 captured_values.append(out_in)
 
-                out_in = self.eops.extract_from_position(s_in, as_dataframe=True)
+                out_in = self.eops.extract_from_position(self.gene_region, as_dataframe=True)
                 out_in = out_in.mean()
                 out_in["SEQ_ID"] = id_seq
                 out_in["TARGET_NAME"] = "GATA1_TSS_2K"
@@ -144,4 +147,5 @@ class GeneratedEnformer(RunEnformerBase):
 
 if __name__ == "__main__":
     print("Running Enformer")
-    RunEnformerBase("RANDOM_GENOME_REGIONS", "GENERATED", "GM12878").extract_dnase()
+    # RunEnformerBase("PROMOTERS", "GENERATED", "GM12878").extract_dnase()
+    GeneratedEnformer(tag="GENERATED", cell_type="GM12878").extract_dnase()
