@@ -4,7 +4,7 @@ import kipoiseq
 import numpy as np
 from kipoiseq import Interval
 
-from .enformer import FastaStringExtractor
+from dnadiffusion.validation.enformer.enformer import FastaStringExtractor
 
 
 def variant_generator(vcf_file, gzipped=False):

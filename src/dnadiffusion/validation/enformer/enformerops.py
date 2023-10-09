@@ -1,5 +1,4 @@
-import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Dict, List
 
 import igv_notebook
@@ -7,28 +6,27 @@ import kipoiseq
 import numpy as np
 import pandas as pd
 import pyBigWig
-import tensorflow as tf
-from tqdm import tqdm
 
-from .enformer import FastaStringExtractor
-from .enformer_utils import one_hot_encode
+from dnadiffusion.validation.enformer.enformer import Enformer, FastaStringExtractor
+from dnadiffusion.validation.enformer.enformer_utils import one_hot_encode
 
 
 @dataclass
 class EnformerData:
-    tracks: List
-    input_sequences_file_path: List
-    interval_list: List
-    capture_bigwig_names: bool
-    full_generated_range_start: int
-    full_generated_range_end: int
-    loaded_seqs: List
+    tracks: List = field(default_factory=list)
+    input_sequences_file_path: str = field(default_factory=str)
+    interval_list: List = field(default_factory=list)
+    capture_bigwig_names: bool = field(default_factory=bool)
+    full_generated_range_start: int = field(default_factory=int)
+    full_generated_range_end: int = field(default_factory=int)
+    loaded_seqs: List = field(default_factory=list)
 
 
 class EnformerOps(EnformerData):
     def __init__(self):
+        super().__init__()
         self.df_sizes: pd.DataFrame = pd.read_table('data/hg38.chrom.sizes', header=None).head(22)
-        self.fasta_extractor: FastaStringExtractor = FastaStringExtractor('data/genome.fa')
+        self.fasta_extractor: FastaStringExtractor = FastaStringExtractor('data/hg38.fa')
 
     def add_track(self, additional_tracks: Dict | List[Dict]):
         """
@@ -62,16 +60,16 @@ class EnformerOps(EnformerData):
         else:
             raise TypeError("track_key must be of type str or list")
 
-    def load_data(self, input_sequence_path: List[str] | str):
-        if type(input_sequence_path) == list:
-            self.loaded_seqs = [[x] for x in input_sequence_path]
-            self.input_sequences_file_path = input_sequence_path
+    def load_data(self, input_sequences: List[str]):
+        if type(input_sequences) == list:
+            self.loaded_seqs = [[x] for x in input_sequences]
+            self.input_sequences_file_path = input_sequences
         else:
             TypeError("input_sequence_path must be of type list")
 
     def generate_plot_number(
         self,
-        model: tf.Module,
+        model: Enformer,
         sequence_number_thousand: int,
         step: int = -1,
         interval_list: List | None = None,
@@ -248,8 +246,6 @@ class EnformerOps(EnformerData):
         """
 
         t_name = f"{track_name}.bw"
-        with open(t_name, 'w') as f:
-            pass
         bw = pyBigWig.open(t_name, "w")
         bw.addHeader([(chr_name, coord) for chr_name, coord in self.df_sizes.values])
         values_conversion = (values * 1000).astype(np.int64) + 0.0
@@ -310,34 +306,3 @@ class EnformerOps(EnformerData):
             "color": color,
             "height": 100,
         }
-
-    def tiling(self, interval_to_window: List[int], window: int = 2000, slice: int = 200):
-        slice_len = int(((interval_to_window[2] + window) - (interval_to_window[1] - window)) / slice)
-        start_slice = interval_to_window[1] - window
-        slices_position = [
-            [interval_to_window[0], start_slice + (slice * n), start_slice + ((slice * n) + slice)]
-            for n in range(slice_len)
-        ]
-        return slices_position
-
-    def generate_tiling(self, model: tf.Module, coord_to_tile: List[int], gata_gene_region: List[int]):
-        tiling_coords = self.tiling(coord_to_tile, window=2000)
-        regions_capture = []
-
-        t_name = "tiling_vis_" + str(coord_to_tile[1]) + "_" + str(coord_to_tile[2]) + ".bw"
-        if os.path.exists(t_name):
-            os.remove(t_name)
-        with open(t_name, 'w') as f:
-            pass
-        bw_insert = pyBigWig.open(t_name, "w")
-        bw_insert.addHeader([(chr, coord) for chr, coord in self.df_sizes.values])
-
-        for t in tqdm(tiling_coords):
-            bw_list = self.generate_plot_number(model, 120, 1, interval_list=t, show_track=False)
-            return_bw_by_tile = self.extract_from_position(gata_gene_region)
-            mean_values_region_cage = np.mean(return_bw_by_tile[1]['values']).astype(np.int64) + 0.0
-            bw_insert.addEntries(t[0], [t[1]], values=[mean_values_region_cage], span=200)
-            regions_capture.append(mean_values_region_cage)
-
-        bw_insert.close()
-        return regions_capture

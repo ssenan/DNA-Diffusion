@@ -10,7 +10,7 @@ urllib.request.urlretrieve("https://hgdownload.cse.ucsc.edu/goldenpath/hg38/bigZ
 
 urllib.request.urlretrieve("https://www.dropbox.com/s/a9ggrhn3626x0di/DNA_DIFFUSION_ALL_SEQS.txt?dl=1", f"{DATA_DIR}/DNA_DIFFUSION_ALL_SEQS.txt")
 
-urllib.request.urlretrieve("https://github.com/pinellolab/DNA-Diffusion/raw/main/src/dnadiffusion/data/K562_hESCT0_HepG2_GM12878_12k_sequences_per_group.txt", f"{DATA_DIR}/K562_hESCT0_HepG2_GM12878_12k_sequences_per_group.txt")
+urllib.request.urlretrieve("https://github.com/pinellolab/DNA-Diffusion/raw/main/data/K562_hESCT0_HepG2_GM12878_12k_sequences_per_group.txt", f"{DATA_DIR}/K562_hESCT0_HepG2_GM12878_12k_sequences_per_group.txt")
 
 urllib.request.urlretrieve("https://www.dropbox.com/s/oqpn784x34f6pcq/random_regions_train_generated_genome_10k.txt?dl=1", f"{DATA_DIR}/random_regions_train_generated_genome_10k.txt")
 
