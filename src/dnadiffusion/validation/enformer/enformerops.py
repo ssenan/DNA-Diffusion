@@ -9,7 +9,7 @@ import pyBigWig
 
 from dnadiffusion.validation.enformer.enformer import Enformer, FastaStringExtractor
 from dnadiffusion.validation.enformer.enformer_utils import one_hot_encode
-
+from dnadiffusion import DATA_DIR
 
 @dataclass
 class EnformerData:
@@ -90,7 +90,7 @@ class EnformerOps(EnformerData):
             which means the last diffusion step (i.e., the final diffused sequence).
 
             interval_list (list, optional): Coordinate to insert the 200 bp
-            sequence. Should be in BED format (chr, start, end). Default is None.
+            sequence. Should be in BED format (chr, start, end). Default is None. This is only used during GeneratedEnformer class call.
 
             show_track (bool, optional): Whether to generate IGV tracks as a result.
             Default is True.
@@ -111,11 +111,10 @@ class EnformerOps(EnformerData):
             interval_list = self.interval_list
 
         # Get the sequences and target interval
-        seqs_test = self.loaded_seqs[sequence_number_thousand]
         target_interval = kipoiseq.Interval(*interval_list)
-        difference = 0
+        # difference = 0
 
-        if replace_remove_region:
+        """if replace_remove_region:
             seq_overwrite = self.fasta_extractor.extract(target_interval)
             len_seq_add = len(seqs_test[step])
             difference = int(round((len(seq_overwrite) - len_seq_add) / 2))
@@ -123,16 +122,21 @@ class EnformerOps(EnformerData):
             if len_seq_add % 4 != 0:
                 add_nucleotide = -1
             difference = (difference * 2) + add_nucleotide
+        """
         chr_test = target_interval.resize(sequence_length).chr
         start_test = target_interval.resize(sequence_length).start
         end_test = target_interval.resize(sequence_length).end
 
-        if replace_remove_region:
+        """if replace_remove_region:
             seq_to_modify = self.fasta_extractor.extract(target_interval.resize(sequence_length))
             seq_input = seq_to_modify.replace(seq_overwrite, seqs_test[step])
+        """
+        seq_to_modify = self.fasta_extractor.extract(target_interval.resize(sequence_length)) 
+        if wildtype:
+            seq_input = self.insert_seq(seq_to_modify, dont_insert=wildtype)
         else:
-            seq_to_modify = self.fasta_extractor.extract(target_interval.resize(sequence_length))
-            seq_input = self.insert_seq(seqs_test[step], seq_to_modify, dont_insert=wildtype)
+            seqs_test = self.loaded_seqs[sequence_number_thousand]
+            seq_input = self.insert_seq(seq_to_modify, seqs_test[step], dont_insert=wildtype)
 
         predictions = self.predict_from_sequence(model, seq_input)
         mod_start = int(start_test + ((end_test - start_test) / 2) - int(114688 / 2))
@@ -209,7 +213,7 @@ class EnformerOps(EnformerData):
         return model.predict_on_batch(sequence_one_hot[np.newaxis])['human'][0]
 
     @staticmethod
-    def insert_seq(seq_x, seq_mod_in, dont_insert=False):
+    def insert_seq(seq_mod_in: str, seq_x: str | None = None, dont_insert: bool =False):
         '''
         This function inserts a sequence `seq_x` into a larger sequence `seq_mod_in`.
 
@@ -278,8 +282,6 @@ class EnformerOps(EnformerData):
 
         chr_name, start, end = self.full_generated_chr, self.full_generated_range_start, self.full_generated_range_end
         t_name = f"{name}_minimal.bw"
-        with open(t_name, 'w') as f:
-            pass
         bw = pyBigWig.open(t_name, "w")
         bw.addHeader([(chr_name, coord) for chr_name, coord in self.df_sizes.values])
         bw_cut = pyBigWig.open(filename, "r")

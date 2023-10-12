@@ -5,6 +5,7 @@ from typing import List
 import pandas as pd
 from tqdm import tqdm
 
+from dnadiffusion import DATA_DIR
 from dnadiffusion.utils.data_util import seq_extract
 from dnadiffusion.validation.enformer.enformer import Enformer
 from dnadiffusion.validation.enformer.enformerops import EnformerOps
@@ -12,25 +13,26 @@ from dnadiffusion.validation.enformer.enformerops import EnformerOps
 os.environ['TF_XLA_FLAGS'] = '--tf_xla_auto_jit=2'
 
 
-class RunEnformerBase:
+class EnformerBase:
     def __init__(
         self,
-        tag: str,
-        cell_type: str,
-        sequence_path: str = 'data/EXPANDED_AXIN2_GM_MASTER_DNA_DIFFUSION_ALL_SEQS.txt',
+        region: str | None = None,
+        sequence_path: str = 'data/validation_dataset.txt',
         model_path: str = 'https://tfhub.dev/deepmind/enformer/1',
         modify_prefix: str = '1_',
-        region: str | None = None,
+        show_track: bool = False,
+        demo: bool = False,
     ):
         self.model = Enformer(model_path)
         self.eops = EnformerOps()
         self.sequence_path = sequence_path
         self.region = region
         self.modify_prefix = modify_prefix
+        self.show_track = show_track
 
         # Loading selected sequences into enformer helper class
-        sequence_list = seq_extract(sequence_path, tag, cell_type)["SEQUENCE"].values.tolist()
-        self.eops.load_data(sequence_list)
+        #sequence_list = seq_extract(sequence_path, tag, cell_type)["SEQUENCE"].values.tolist()
+        #self.eops.load_data(sequence_list)
 
         # Loading tracks
         with open("data/tracks_list.pkl", "rb") as f:
@@ -40,6 +42,9 @@ class RunEnformerBase:
         all_sequences = seq_extract(sequence_path, region)
         # Selecting columns of interest
         self.all_sequences = all_sequences[["chrom", "start", "end", "ID"]].values.tolist()
+        if demo:
+            self.all_sequences = [self.all_sequences[0]]
+
 
     def extract_dnase(self):
         captured_values = []
@@ -47,44 +52,50 @@ class RunEnformerBase:
             try:
                 s_in = [s[0], int(s[1]), int(s[2])]
                 id_seq = s[3]
-                list_bw = self.eops.generate_plot_number(
-                    self.model, 0, interval_list=s_in, wildtype=True, show_track=False, modify_prefix=self.modify_prefix
+                self.eops.generate_plot_number(
+                    self.model, 0, interval_list=s_in, wildtype=True, show_track=self.show_track, modify_prefix=self.modify_prefix
                 )
-            except RuntimeError:
+            except RuntimeError as r:
                 # Infrequent the entries are out of order error for some random seqs
                 continue
+
             try:
                 out_in = self.eops.extract_from_position(s_in, as_dataframe=True)
                 out_in = out_in.mean()
                 out_in["SEQ_ID"] = id_seq
                 out_in["TARGET_NAME"] = "ITSELF"
                 captured_values.append(out_in)
-            except ValueError:
+            except ValueError as v:
                 continue
         df_out = pd.DataFrame([x.values.tolist() for x in captured_values], columns=out_in.index)
 
         # Save output
         print(f"Saving output to dnase_{self.region}_seqs.txt")
-        df_out.to_csv(f"dnase_{self.region}_seqs.txt", sep="\t", index=False)
+        df_out.to_csv(f"{DATA_DIR}/{self.region}_seqs.txt", sep="\t", index=False)
 
 
-class GeneratedEnformer(RunEnformerBase):
+class GeneratedEnformer(EnformerBase):
     def __init__(
         self,
         tag: str,
-        cell_type: str,
+        cell_type: str | None = None,
         enhancer_region: List[str | int] = ["chr17", 65563685, 65564346],
         gene_region: List[str | int] = ["chr17", 65559702, 65560101],
         save_interval: int = 10,
+        show_track: bool = False,
+        demo: bool = False,
     ):
-        super().__init__(tag, cell_type)
+        super().__init__()
         self.enhancer_region = enhancer_region
         self.gene_region = gene_region
         self.save_interval = save_interval
+        self.show_track = show_track
 
-        all_sequences = seq_extract(self.sequence_path, tag, cell_type)
-        generated_seqs = all_sequences[all_sequences["TAG"] == "GENERATED"]
+        all_sequences = seq_extract(self.sequence_path, tag)
+        generated_seqs = all_sequences[all_sequences["TAG"] == "Generated"]
         self.all_sequences = generated_seqs[["SEQUENCE", "ID"]].values.tolist()
+        if demo:
+            self.all_sequences = self.all_sequences[:100]
 
     def extract_dnase(self):
         captured_values = []
@@ -99,7 +110,7 @@ class GeneratedEnformer(RunEnformerBase):
                     -1,
                     interval_list=self.enhancer_region,
                     wildtype=False,
-                    show_track=False,
+                    show_track=self.show_track,
                     modify_prefix=self.modify_prefix,
                 )
             except RuntimeError:
@@ -142,10 +153,13 @@ class GeneratedEnformer(RunEnformerBase):
         df_out = pd.concat([df_out_ENH, df_out_GENE], axis=1)
 
         print(f"Saving output to {self.modify_prefix}GENERATED_SEQS.TXT")
-        df_out.to_csv(self.modify_prefix + "GENERATED_SEQS.TXT", sep="\t", index=False)
+        df_out.to_csv(f"{DATA_DIR}/" + self.modify_prefix + "GENERATED_SEQS.TXT", sep="\t", index=False)
 
 
 if __name__ == "__main__":
     print("Running Enformer")
-    # RunEnformerBase("PROMOTERS", "GENERATED", "GM12878").extract_dnase()
-    GeneratedEnformer(tag="GENERATED", cell_type="GM12878").extract_dnase()
+    #EnformerBase(region="Promoters").extract_dnase()
+    #EnformerBase(region="Random_Genome_Regions").extract_dnase()
+    for tag in ["Generated", "GM12878_positive", "HepG2_positive", "Test", "Training", "Validation", "negative"]:
+            GeneratedEnformer(tag=tag).extract_dnase()
+    #GeneratedEnformer(tag="GENERATED", cell_type="GM12878").extract_dnase()
