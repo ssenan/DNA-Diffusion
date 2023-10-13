@@ -5,10 +5,12 @@ import urllib.request
 from dnadiffusion import DATA_DIR
 
 # Download data
-print('Downloading hg38')
-urllib.request.urlretrieve('http://hgdownload.cse.ucsc.edu/goldenPath/hg38/bigZips/hg38.fa.gz', 'data/hg38.fa.gz')
-with gzip.open('data/hg38.fa.gz', 'rb') as f_in:
-    with open('data/hg38.fa', 'wb') as f_out:
+print("Downloading hg38")
+urllib.request.urlretrieve(
+    "http://hgdownload.cse.ucsc.edu/goldenPath/hg38/bigZips/hg38.fa.gz", f"{DATA_DIR}/hg38.fa.gz"
+)
+with gzip.open(f"{DATA_DIR}/hg38.fa.gz", "rb") as f_in:
+    with open(f"{DATA_DIR}/hg38.fa", "wb") as f_out:
         shutil.copyfileobj(f_in, f_out)
 
 urllib.request.urlretrieve(
