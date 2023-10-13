@@ -25,8 +25,8 @@ class EnformerData:
 class EnformerOps(EnformerData):
     def __init__(self):
         super().__init__()
-        self.df_sizes: pd.DataFrame = pd.read_table('data/hg38.chrom.sizes', header=None).head(22)
-        self.fasta_extractor: FastaStringExtractor = FastaStringExtractor('data/hg38.fa')
+        self.df_sizes: pd.DataFrame = pd.read_table(f'{DATA_DIR}/hg38.chrom.sizes', header=None).head(22)
+        self.fasta_extractor: FastaStringExtractor = FastaStringExtractor(f'{DATA_DIR}/hg38.fa')
 
     def add_track(self, additional_tracks: Dict | List[Dict]):
         """

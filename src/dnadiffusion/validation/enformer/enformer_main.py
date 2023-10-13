@@ -17,7 +17,7 @@ class EnformerBase:
     def __init__(
         self,
         region: str | None = None,
-        sequence_path: str = 'data/validation_dataset.txt',
+        sequence_path: str = f'{DATA_DIR}/validation_dataset.txt',
         model_path: str = 'https://tfhub.dev/deepmind/enformer/1',
         modify_prefix: str = '1_',
         show_track: bool = False,
@@ -35,7 +35,7 @@ class EnformerBase:
         #self.eops.load_data(sequence_list)
 
         # Loading tracks
-        with open("data/tracks_list.pkl", "rb") as f:
+        with open(f"{DATA_DIR}/tracks_list.pkl", "rb") as f:
             tracks_list = pickle.load(f)
         self.eops.add_track(tracks_list)
 
@@ -95,7 +95,7 @@ class GeneratedEnformer(EnformerBase):
         generated_seqs = all_sequences[all_sequences["TAG"] == "Generated"]
         self.all_sequences = generated_seqs[["SEQUENCE", "ID"]].values.tolist()
         if demo:
-            self.all_sequences = self.all_sequences[:100]
+            self.all_sequences = self.all_sequences[:20]
 
     def extract_dnase(self):
         captured_values = []
@@ -105,7 +105,7 @@ class GeneratedEnformer(EnformerBase):
                 s_in = s[1]
                 id_seq = s[0]
                 self.eops.load_data([id_seq])
-                list_bw = self.eops.generate_plot_number(
+                self.eops.generate_plot_number(
                     self.model,
                     -1,
                     interval_list=self.enhancer_region,
@@ -161,5 +161,5 @@ if __name__ == "__main__":
     #EnformerBase(region="Promoters").extract_dnase()
     #EnformerBase(region="Random_Genome_Regions").extract_dnase()
     for tag in ["Generated", "GM12878_positive", "HepG2_positive", "Test", "Training", "Validation", "negative"]:
-            GeneratedEnformer(tag=tag).extract_dnase()
+        GeneratedEnformer(tag=tag).extract_dnase()
     #GeneratedEnformer(tag="GENERATED", cell_type="GM12878").extract_dnase()
