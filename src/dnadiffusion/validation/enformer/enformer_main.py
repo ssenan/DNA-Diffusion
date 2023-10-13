@@ -46,7 +46,7 @@ class EnformerBase:
             self.all_sequences = [self.all_sequences[0]]
 
 
-    def extract_dnase(self):
+    def extract(self):
         captured_values = []
         for s in tqdm(self.all_sequences):
             try:
@@ -86,18 +86,19 @@ class GeneratedEnformer(EnformerBase):
         demo: bool = False,
     ):
         super().__init__()
+        self.tag = tag
         self.enhancer_region = enhancer_region
         self.gene_region = gene_region
         self.save_interval = save_interval
         self.show_track = show_track
 
         all_sequences = seq_extract(self.sequence_path, tag)
-        generated_seqs = all_sequences[all_sequences["TAG"] == "Generated"]
-        self.all_sequences = generated_seqs[["SEQUENCE", "ID"]].values.tolist()
+        # generated_seqs = all_sequences[all_sequences["TAG"] == "Generated"]
+        self.all_sequences = all_sequences[["SEQUENCE", "ID"]].values.tolist()
         if demo:
-            self.all_sequences = self.all_sequences[:20]
+            self.all_sequences = self.all_sequences[:10]
 
-    def extract_dnase(self):
+    def extract(self):
         captured_values = []
         captured_values_target = []
         for i, s in tqdm(enumerate(self.all_sequences)):
@@ -152,14 +153,15 @@ class GeneratedEnformer(EnformerBase):
 
         df_out = pd.concat([df_out_ENH, df_out_GENE], axis=1)
 
-        print(f"Saving output to {self.modify_prefix}GENERATED_SEQS.TXT")
-        df_out.to_csv(f"{DATA_DIR}/" + self.modify_prefix + "GENERATED_SEQS.TXT", sep="\t", index=False)
+        print(f"Saving output to {DATA_DIR}/{self.tag}_GENERATED_SEQS.TXT")
+        df_out.to_csv(f"{DATA_DIR}/" + self.tag + "_GENERATED_SEQS.TXT", sep="\t", index=False)
 
 
 if __name__ == "__main__":
-    print("Running Enformer")
-    #EnformerBase(region="Promoters").extract_dnase()
-    #EnformerBase(region="Random_Genome_Regions").extract_dnase()
-    for tag in ["Generated", "GM12878_positive", "HepG2_positive", "Test", "Training", "Validation", "negative"]:
-        GeneratedEnformer(tag=tag).extract_dnase()
-    #GeneratedEnformer(tag="GENERATED", cell_type="GM12878").extract_dnase()
+    #EnformerBase(region="Promoters").extract()
+    #EnformerBase(region="Random_Genome_Regions").extract()
+    for tag in ["Generated", "GM12878_positive", "HepG2_positive", "Test", "Training", "Validation", "Negative"]:
+        print(f"Running Enformer for {tag}")
+        print(10 *"=")
+        GeneratedEnformer(tag=tag).extract()
+    GeneratedEnformer(tag="Test", demo=True).extract()
