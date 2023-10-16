@@ -68,7 +68,7 @@ class EnformerOps(EnformerData):
         else:
             TypeError("input_sequence_path must be of type list")
 
-    def generate_plot_number(
+    def generate_tracks(
         self,
         model: Enformer,
         sequence_number_thousand: int,
@@ -104,7 +104,7 @@ class EnformerOps(EnformerData):
             Don't insert and capture the wildtype sequence
 
         Returns:
-            list: A list with the name of all bigwig files generated.
+            bigwignames (list): A list with the name of all bigwig files generated.
         """
         # List to capture all bigwig files generated
         bigwig_names = []
@@ -115,23 +115,11 @@ class EnformerOps(EnformerData):
         target_interval = kipoiseq.Interval(*interval_list)
         # difference = 0
 
-        """if replace_remove_region:
-            seq_overwrite = self.fasta_extractor.extract(target_interval)
-            len_seq_add = len(seqs_test[step])
-            difference = int(round((len(seq_overwrite) - len_seq_add) / 2))
-            add_nucleotide = 1
-            if len_seq_add % 4 != 0:
-                add_nucleotide = -1
-            difference = (difference * 2) + add_nucleotide
-        """
         chr_test = target_interval.resize(sequence_length).chr
         start_test = target_interval.resize(sequence_length).start
         end_test = target_interval.resize(sequence_length).end
 
-        """if replace_remove_region:
-            seq_to_modify = self.fasta_extractor.extract(target_interval.resize(sequence_length))
-            seq_input = seq_to_modify.replace(seq_overwrite, seqs_test[step])
-        """
+
         seq_to_modify = self.fasta_extractor.extract(target_interval.resize(sequence_length))
         if wildtype:
             seq_input = self.insert_seq(seq_to_modify, dont_insert=wildtype)

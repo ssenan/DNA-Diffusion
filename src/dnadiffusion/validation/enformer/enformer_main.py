@@ -20,6 +20,7 @@ class EnformerBase:
         sequence_path: str = f'{DATA_DIR}/validation_dataset.txt',
         model_path: str = 'https://tfhub.dev/deepmind/enformer/1',
         modify_prefix: str = '1_',
+        sequence_length: int = 393216,
         show_track: bool = False,
         demo: bool = False,
     ):
@@ -31,8 +32,8 @@ class EnformerBase:
         self.show_track = show_track
 
         # Loading selected sequences into enformer helper class
-        #sequence_list = seq_extract(sequence_path, tag, cell_type)["SEQUENCE"].values.tolist()
-        #self.eops.load_data(sequence_list)
+        # sequence_list = seq_extract(sequence_path, tag, cell_type)["SEQUENCE"].values.tolist()
+        # self.eops.load_data(sequence_list)
 
         # Loading tracks
         with open(f"{DATA_DIR}/tracks_list.pkl", "rb") as f:
@@ -42,18 +43,27 @@ class EnformerBase:
         all_sequences = seq_extract(sequence_path, region)
         # Selecting columns of interest
         self.all_sequences = all_sequences[["chrom", "start", "end", "ID"]].values.tolist()
+        # Remove all rows where start < seq_length / 2 or  end < seq_length / 2
+        self.all_sequences = [
+            x for x in self.all_sequences if (int(x[1]) > sequence_length / 2) and (int(x[2]) > sequence_length / 2)
+        ]
         if demo:
             self.all_sequences = self.all_sequences[2050:2070]
-
 
     def extract(self):
         captured_values = []
         for s in tqdm(self.all_sequences):
             # try:
             s_in = [s[0], int(s[1]), int(s[2])]
+            # s2 > seq_length / 2
             id_seq = s[3]
-            self.eops.generate_plot_number(
-                self.model, 0, interval_list=s_in, wildtype=True, show_track=self.show_track, modify_prefix=self.modify_prefix
+            self.eops.generate_tracks(
+                self.model,
+                0,
+                interval_list=s_in,
+                wildtype=True,
+                show_track=self.show_track,
+                modify_prefix=self.modify_prefix,
             )
             # except RuntimeError as r:
             #     # Infrequent the entries are out of order error for some random seqs
@@ -106,7 +116,7 @@ class GeneratedEnformer(EnformerBase):
                 s_in = s[1]
                 id_seq = s[0]
                 self.eops.load_data([id_seq])
-                self.eops.generate_plot_number(
+                self.eops.generate_tracks(
                     self.model,
                     -1,
                     interval_list=self.enhancer_region,
@@ -159,9 +169,9 @@ class GeneratedEnformer(EnformerBase):
 
 if __name__ == "__main__":
     EnformerBase(region="Promoters", demo=True).extract()
-    #EnformerBase(region="Random_Genome_Regions", demo=True).extract()
+    # EnformerBase(region="Random_Genome_Regions", demo=True).extract()
     # for tag in ["Generated", "GM12878_positive", "HepG2_positive", "Test", "Training", "Validation", "Negative"]:
-        # print(f"Running Enformer for {tag}")
-        # print(10 *"=")
-        # GeneratedEnformer(tag=tag).extract()
+    # print(f"Running Enformer for {tag}")
+    # print(10 *"=")
+    # GeneratedEnformer(tag=tag).extract()
     # GeneratedEnformer(tag="Test", demo=True).extract()
