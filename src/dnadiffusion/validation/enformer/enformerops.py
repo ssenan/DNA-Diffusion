@@ -7,9 +7,10 @@ import numpy as np
 import pandas as pd
 import pyBigWig
 
+from dnadiffusion import DATA_DIR
 from dnadiffusion.validation.enformer.enformer import Enformer, FastaStringExtractor
 from dnadiffusion.validation.enformer.enformer_utils import one_hot_encode
-from dnadiffusion import DATA_DIR
+
 
 @dataclass
 class EnformerData:
@@ -131,7 +132,7 @@ class EnformerOps(EnformerData):
             seq_to_modify = self.fasta_extractor.extract(target_interval.resize(sequence_length))
             seq_input = seq_to_modify.replace(seq_overwrite, seqs_test[step])
         """
-        seq_to_modify = self.fasta_extractor.extract(target_interval.resize(sequence_length)) 
+        seq_to_modify = self.fasta_extractor.extract(target_interval.resize(sequence_length))
         if wildtype:
             seq_input = self.insert_seq(seq_to_modify, dont_insert=wildtype)
         else:
@@ -213,7 +214,7 @@ class EnformerOps(EnformerData):
         return model.predict_on_batch(sequence_one_hot[np.newaxis])['human'][0]
 
     @staticmethod
-    def insert_seq(seq_mod_in: str, seq_x: str | None = None, dont_insert: bool =False):
+    def insert_seq(seq_mod_in: str, seq_x: str | None = None, dont_insert: bool = False):
         '''
         This function inserts a sequence `seq_x` into a larger sequence `seq_mod_in`.
 

@@ -43,30 +43,30 @@ class EnformerBase:
         # Selecting columns of interest
         self.all_sequences = all_sequences[["chrom", "start", "end", "ID"]].values.tolist()
         if demo:
-            self.all_sequences = [self.all_sequences[0]]
+            self.all_sequences = self.all_sequences[2050:2070]
 
 
     def extract(self):
         captured_values = []
         for s in tqdm(self.all_sequences):
-            try:
-                s_in = [s[0], int(s[1]), int(s[2])]
-                id_seq = s[3]
-                self.eops.generate_plot_number(
-                    self.model, 0, interval_list=s_in, wildtype=True, show_track=self.show_track, modify_prefix=self.modify_prefix
-                )
-            except RuntimeError as r:
-                # Infrequent the entries are out of order error for some random seqs
-                continue
+            # try:
+            s_in = [s[0], int(s[1]), int(s[2])]
+            id_seq = s[3]
+            self.eops.generate_plot_number(
+                self.model, 0, interval_list=s_in, wildtype=True, show_track=self.show_track, modify_prefix=self.modify_prefix
+            )
+            # except RuntimeError as r:
+            #     # Infrequent the entries are out of order error for some random seqs
+            #     continue
 
-            try:
-                out_in = self.eops.extract_from_position(s_in, as_dataframe=True)
-                out_in = out_in.mean()
-                out_in["SEQ_ID"] = id_seq
-                out_in["TARGET_NAME"] = "ITSELF"
-                captured_values.append(out_in)
-            except ValueError as v:
-                continue
+            # try:
+            out_in = self.eops.extract_from_position(s_in, as_dataframe=True)
+            out_in = out_in.mean()
+            out_in["SEQ_ID"] = id_seq
+            out_in["TARGET_NAME"] = "ITSELF"
+            captured_values.append(out_in)
+            # except ValueError as v:
+            #     continue
         df_out = pd.DataFrame([x.values.tolist() for x in captured_values], columns=out_in.index)
 
         # Save output
@@ -158,10 +158,10 @@ class GeneratedEnformer(EnformerBase):
 
 
 if __name__ == "__main__":
-    #EnformerBase(region="Promoters").extract()
-    #EnformerBase(region="Random_Genome_Regions").extract()
-    for tag in ["Generated", "GM12878_positive", "HepG2_positive", "Test", "Training", "Validation", "Negative"]:
-        print(f"Running Enformer for {tag}")
-        print(10 *"=")
-        GeneratedEnformer(tag=tag).extract()
-    GeneratedEnformer(tag="Test", demo=True).extract()
+    EnformerBase(region="Promoters", demo=True).extract()
+    #EnformerBase(region="Random_Genome_Regions", demo=True).extract()
+    # for tag in ["Generated", "GM12878_positive", "HepG2_positive", "Test", "Training", "Validation", "Negative"]:
+        # print(f"Running Enformer for {tag}")
+        # print(10 *"=")
+        # GeneratedEnformer(tag=tag).extract()
+    # GeneratedEnformer(tag="Test", demo=True).extract()
