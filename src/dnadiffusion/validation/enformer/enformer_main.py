@@ -2,6 +2,7 @@ import os
 import pickle
 from typing import List
 
+import numpy as np
 import pandas as pd
 from tqdm import tqdm
 
@@ -31,9 +32,7 @@ class EnformerBase:
         self.modify_prefix = modify_prefix
         self.show_track = show_track
 
-        # Loading selected sequences into enformer helper class
-        # sequence_list = seq_extract(sequence_path, tag, cell_type)["SEQUENCE"].values.tolist()
-        # self.eops.load_data(sequence_list)
+        chrom_sizes = pd.read_table(f"{DATA_DIR}/hg38.chrom.sizes", header=None).set_index(0).to_dict()[1]
 
         # Loading tracks
         with open(f"{DATA_DIR}/tracks_list.pkl", "rb") as f:
@@ -43,19 +42,19 @@ class EnformerBase:
         all_sequences = seq_extract(sequence_path, region)
         # Selecting columns of interest
         self.all_sequences = all_sequences[["chrom", "start", "end", "ID"]].values.tolist()
-        # Remove all rows where start < seq_length / 2 or  end < seq_length / 2
         self.all_sequences = [
-            x for x in self.all_sequences if (int(x[1]) > sequence_length / 2) and (int(x[2]) > sequence_length / 2)
+            x
+            for x in self.all_sequences
+            if (int(x[1]) > sequence_length / 2) and (np.abs(int(chrom_sizes[x[0]]) - int(x[2])) > sequence_length / 2)
         ]
         if demo:
+            print(len(self.all_sequences))
             self.all_sequences = self.all_sequences[2050:2070]
 
     def extract(self):
         captured_values = []
         for s in tqdm(self.all_sequences):
-            # try:
             s_in = [s[0], int(s[1]), int(s[2])]
-            # s2 > seq_length / 2
             id_seq = s[3]
             self.eops.generate_tracks(
                 self.model,
@@ -65,18 +64,11 @@ class EnformerBase:
                 show_track=self.show_track,
                 modify_prefix=self.modify_prefix,
             )
-            # except RuntimeError as r:
-            #     # Infrequent the entries are out of order error for some random seqs
-            #     continue
-
-            # try:
             out_in = self.eops.extract_from_position(s_in, as_dataframe=True)
             out_in = out_in.mean()
             out_in["SEQ_ID"] = id_seq
             out_in["TARGET_NAME"] = "ITSELF"
             captured_values.append(out_in)
-            # except ValueError as v:
-            #     continue
         df_out = pd.DataFrame([x.values.tolist() for x in captured_values], columns=out_in.index)
 
         # Save output
