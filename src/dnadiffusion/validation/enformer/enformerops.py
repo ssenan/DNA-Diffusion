@@ -72,13 +72,14 @@ class EnformerOps(EnformerData):
         self,
         model: Enformer,
         sequence_number_thousand: int,
+        gene_region: List[str | int],
         step: int = -1,
         interval_list: str | List[str] | None = None,
         show_track: bool = False,
         wildtype: bool = False,
         modify_prefix: str = "",
         sequence_length: int = 393216,
-        replace_remove_region: bool = False,
+        view_region_offset: int = 10000,
     ):
         """
         Generates IGV tracks for a given sequence in a diffusion dataset.
@@ -112,13 +113,12 @@ class EnformerOps(EnformerData):
             interval_list = self.interval_list
 
         # Get the sequences and target interval
-        target_interval = kipoiseq.Interval(*interval_list)
+        target_interval = kipoiseq.Interval(interval_list[0], int(interval_list[1]), int(interval_list[2]))
         # difference = 0
 
         chr_test = target_interval.resize(sequence_length).chr
         start_test = target_interval.resize(sequence_length).start
         end_test = target_interval.resize(sequence_length).end
-
 
         seq_to_modify = self.fasta_extractor.extract(target_interval.resize(sequence_length))
         if wildtype:
@@ -140,7 +140,34 @@ class EnformerOps(EnformerData):
             b = igv_notebook.Browser(
                 {
                     "genome": "hg38",
-                    "locus": f"{chr_test}:{mod_start}-{mod_end}",
+                    "locus": f"{gene_region[0]}:{gene_region[1]-view_region_offset}-{gene_region[1]+view_region_offset}",
+                    "roi": [
+                        # Gene Region
+                        {
+                            "name": "Gene",
+                            "color": "rgba(3,52,249,0.25)",
+                            "features": [
+                                {
+                                    "chr": gene_region[0] ,
+                                    "start":  gene_region[1],
+                                    "end": gene_region[2]
+                                },
+
+                                        ]
+                        },
+                        {
+                            "name": "Enhancer",
+                            "color": "rgba(255, 0, 0, 0.25)",
+                            "features": [
+                                {
+                                    "chr": interval_list[0] ,
+                                    "start":  interval_list[1],
+                                    "end": interval_list[2]
+                                },
+
+                                        ]
+                        }
+                      ]
                 }
             )
 
@@ -149,12 +176,14 @@ class EnformerOps(EnformerData):
                 id = track["id"]
                 n = modify_prefix + track["name"]
                 lg = track["log"]
+                color = track["color"]
+                autoscaleGroup = track["autoscaleGroup"]
 
                 p_values = predictions[:, id]
                 if lg == True:
                     p_values = np.log10(1 + predictions[:, id])
                 bigwig_names.append(n + ".bw")
-                out_track = self._enformer_bigwig_creation(chr_test, mod_start, p_values, n)
+                out_track = self._enformer_bigwig_creation(chr_test, mod_start, p_values, n, color, autoscaleGroup)
                 if show_track:
                     b.load_track(out_track)
 
@@ -222,7 +251,7 @@ class EnformerOps(EnformerData):
 
         return ''.join(seq_to_mod_array)
 
-    def _enformer_bigwig_creation(self, chr_name, start, values, track_name, color='BLUE'):
+    def _enformer_bigwig_creation(self, chr_name, start, values, track_name, color, autoscaleGroup):
         """
         Creates a bigwig file for an Enformer track.
 
@@ -253,6 +282,7 @@ class EnformerOps(EnformerData):
             "displayMode": "EXPANDED",
             "color": f"{color}",
             "height": 100,
+            "autoscaleGroup": f"{autoscaleGroup}",
         }
 
     def _generate_real_tracks(self, name, filename, color):
