@@ -165,7 +165,7 @@ class GeneratedEnformer(EnformerBase):
         file_modify = 1
         captured_values = []
         captured_values_target = []
-        for i, s in tqdm(enumerate(self.all_sequences)):
+        for i, s in tqdm(enumerate(self.all_sequences), total=len(self.all_sequences)):
             try:
                 s_in = s[1]
                 id_seq = s[0]
