@@ -183,35 +183,36 @@ class GeneratedEnformer(EnformerBase):
                 continue
 
             try:
-                out_in = self.eops.extract_from_position(self.enhancer_region, as_dataframe=True)
-                out_in = out_in.mean()
-                out_in["SEQ_ID"] = s_in
-                out_in["TARGET_NAME"] = "ENH_GATA1"
-                captured_values.append(out_in)
-
-                out_in = self.eops.extract_from_position(self.gene_region, as_dataframe=True)
-                out_in = out_in.mean()
-                out_in["SEQ_ID"] = id_seq
-                out_in["TARGET_NAME"] = "GATA1_TSS_2K"
-                captured_values_target.append(out_in)
+                # out_in = self.eops.extract_from_position(self.enhancer_region, as_dataframe=True)
+                # out_in = out_in.mean()
+                # out_in["SEQ_ID"] = s_in
+                # out_in["TARGET_NAME"] = "ENH_GATA1"
+                # captured_values.append(out_in)
+                #
+                # out_in = self.eops.extract_from_position(self.gene_region, as_dataframe=True)
+                # out_in = out_in.mean()
+                # out_in["SEQ_ID"] = id_seq
+                # out_in["TARGET_NAME"] = "GATA1_TSS_2K"
+                # captured_values_target.append(out_in)
+                pass
             except ValueError:
                 continue
 
-            if (i != 0) and ((i+1) % self.save_interval) == 0:
-                df_out_ENH = pd.DataFrame(
-                    [x.values.tolist() for x in captured_values], columns=["ENHANCER_" + x for x in out_in.index]
-                )
-                df_out_GENE = pd.DataFrame(
-                    [x.values.tolist() for x in captured_values_target], columns=["GENE_" + x for x in out_in.index]
-                )
-
-                df_out = pd.concat([df_out_ENH, df_out_GENE], axis=1)
-
-                df_out.to_csv(f"{DATA_DIR}/{str(file_modify)}_test_seqs.TXT", sep="\t", index=False)
-                # Resetting captured values
-                captured_values = []
-                captured_values_target = []
-                file_modify += 1
+            # if (i != 0) and ((i+1) % self.save_interval) == 0:
+            #     df_out_ENH = pd.DataFrame(
+            #         [x.values.tolist() for x in captured_values], columns=["ENHANCER_" + x for x in out_in.index]
+            #     )
+            #     df_out_GENE = pd.DataFrame(
+            #         [x.values.tolist() for x in captured_values_target], columns=["GENE_" + x for x in out_in.index]
+            #     )
+            #
+            #     df_out = pd.concat([df_out_ENH, df_out_GENE], axis=1)
+            #
+            #     df_out.to_csv(f"{DATA_DIR}/{str(file_modify)}_test_seqs.TXT", sep="\t", index=False)
+            #     # Resetting captured values
+            #     captured_values = []
+            #     captured_values_target = []
+            #     file_modify += 1
 
         # Find all the files written to DATA_DIR from the above loop
         files = sorted([f"{DATA_DIR}/{f}" for f in os.listdir(DATA_DIR) if f.endswith("_test_seqs.TXT")])
