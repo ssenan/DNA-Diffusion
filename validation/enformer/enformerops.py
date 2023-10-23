@@ -8,8 +8,8 @@ import pandas as pd
 import pyBigWig
 
 from dnadiffusion import DATA_DIR
-from dnadiffusion.validation.enformer.enformer import Enformer, FastaStringExtractor
-from dnadiffusion.validation.enformer.enformer_utils import one_hot_encode
+from validation.enformer.enformer import Enformer, FastaStringExtractor
+from validation.enformer.enformer_utils import one_hot_encode
 
 
 @dataclass
@@ -147,27 +147,17 @@ class EnformerOps(EnformerData):
                             "name": "Gene",
                             "color": "rgba(3,52,249,0.25)",
                             "features": [
-                                {
-                                    "chr": gene_region[0] ,
-                                    "start":  gene_region[1],
-                                    "end": gene_region[2]
-                                },
-
-                                        ]
+                                {"chr": gene_region[0], "start": gene_region[1], "end": gene_region[2]},
+                            ],
                         },
                         {
                             "name": "Enhancer",
                             "color": "rgba(255, 0, 0, 0.25)",
                             "features": [
-                                {
-                                    "chr": interval_list[0] ,
-                                    "start":  interval_list[1],
-                                    "end": interval_list[2]
-                                },
-
-                                        ]
-                        }
-                      ]
+                                {"chr": interval_list[0], "start": interval_list[1], "end": interval_list[2]},
+                            ],
+                        },
+                    ],
                 }
             )
 

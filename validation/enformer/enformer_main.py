@@ -9,18 +9,20 @@ from tqdm import tqdm
 
 from dnadiffusion import DATA_DIR
 from dnadiffusion.utils.data_util import seq_extract
-from dnadiffusion.validation.enformer.enformer import Enformer
-from dnadiffusion.validation.enformer.enformerops import EnformerOps
+from validation.enformer.enformer import Enformer
+from validation.enformer.enformerops import EnformerOps
 
 os.environ['TF_XLA_FLAGS'] = '--tf_xla_auto_jit=2'
 
-def extract_enhancer_sequence(genome_path:str, chr: str, start: str, end: str, shuffle: bool = False):
+
+def extract_enhancer_sequence(genome_path: str, chr: str, start: str, end: str, shuffle: bool = False):
     a = pybedtools.BedTool(f"{chr} {start} {end}", from_string=True)
     a = a.sequence(fi=f"{genome_path}")
-    sequence =  (open(a.seqfn).read().split("\n")[1])
+    sequence = open(a.seqfn).read().split("\n")[1]
     if shuffle:
         return ''.join(np.random.permutation(list(sequence)))
     return sequence
+
 
 class EnformerBase:
     def __init__(
@@ -83,6 +85,7 @@ class EnformerBase:
         print(f"Saving output to dnase_{self.region}_seqs.txt")
         df_out.to_csv(f"{DATA_DIR}/{self.region}_seqs.txt", sep="\t", index=False)
 
+
 class LocusVisualization(EnformerBase):
     def __init__(
         self,
@@ -91,7 +94,7 @@ class LocusVisualization(EnformerBase):
         index: int = 0,
         id: str = "81695_GENERATED_K562",
         genome_path: str = f"{DATA_DIR}/hg38.fa",
-        enhancer_region: List[str | int] = ["chrX", 48782929,48783129],
+        enhancer_region: List[str | int] = ["chrX", 48782929, 48783129],
         gene_region: List[str | int] = ['chrX', 48785536, 48787536],
         show_track: bool = False,
         wildtype_shuffle: bool = False,
@@ -122,7 +125,7 @@ class LocusVisualization(EnformerBase):
                 self.enhancer_region[0],
                 str(self.enhancer_region[1]),
                 str(self.enhancer_region[2]),
-                shuffle=self.wildtype_shuffle
+                shuffle=self.wildtype_shuffle,
             )
 
         self.eops.load_data([id_seq])
@@ -142,7 +145,7 @@ class GeneratedEnformer(EnformerBase):
         self,
         tag: str,
         cell_type: str | None = None,
-        enhancer_region: List[str | int] = ["chrX", 48782929,48783129],
+        enhancer_region: List[str | int] = ["chrX", 48782929, 48783129],
         gene_region: List[str | int] = ['chrX', 48785536, 48787536],
         save_interval: int = 10,
         show_track: bool = False,
@@ -227,7 +230,6 @@ class GeneratedEnformer(EnformerBase):
         for f in files:
             os.remove(f)
 
-
         # df_out_ENH = pd.DataFrame(
         #     [x.values.tolist() for x in captured_values], columns=["ENHANCER_" + x for x in out_in.index]
         # )
@@ -242,7 +244,7 @@ class GeneratedEnformer(EnformerBase):
 
 
 if __name__ == "__main__":
-    #EnformerBase(region="Promoters").extract()
+    # EnformerBase(region="Promoters").extract()
     # EnformerBase(region="Random_Genome_Regions", demo=True).extract()
     # for tag in ["Generated", "GM12878_positive", "HepG2_positive", "Test", "Training", "Validation", "Negative"]:
     # print(f"Running Enformer for {tag}")
