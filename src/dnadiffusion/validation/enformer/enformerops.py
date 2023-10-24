@@ -161,32 +161,32 @@ class EnformerOps(EnformerData):
                 }
             )
 
-        # for track in self.tracks:
-        #     if track["type"] == "enformer":
-        #         id = track["id"]
-        #         n = modify_prefix + track["name"]
-        #         lg = track["log"]
-        #         color = track["color"]
-        #         autoscaleGroup = track["autoscaleGroup"]
-        #
-        #         p_values = predictions[:, id]
-        #         if lg == True:
-        #             p_values = np.log10(1 + predictions[:, id])
-        #         bigwig_names.append(n + ".bw")
-        #         out_track = self._enformer_bigwig_creation(chr_test, mod_start, p_values, n, color, autoscaleGroup)
-        #         if show_track:
-        #             b.load_track(out_track)
-        #
-        #     elif track["type"] == "real":
-        #         n = track["name"]
-        #         f = modify_prefix + track["file"]
-        #         c = track["color"]
-        #         bigwig_names.append(f)
-        #         if show_track:
-        #             b.load_track(self._generate_real_tracks(n, f, c))
-        #
-        # self.bigwig_names = bigwig_names
-        # return bigwig_names
+        for track in self.tracks:
+            if track["type"] == "enformer":
+                id = track["id"]
+                n = modify_prefix + track["name"]
+                lg = track["log"]
+                color = track["color"]
+                autoscaleGroup = track["autoscaleGroup"]
+
+                p_values = predictions[:, id]
+                if lg == True:
+                    p_values = np.log10(1 + predictions[:, id])
+                bigwig_names.append(n + ".bw")
+                out_track = self._enformer_bigwig_creation(chr_test, mod_start, p_values, n, color, autoscaleGroup)
+                if show_track:
+                    b.load_track(out_track)
+
+            elif track["type"] == "real":
+                n = track["name"]
+                f = modify_prefix + track["file"]
+                c = track["color"]
+                bigwig_names.append(f)
+                if show_track:
+                    b.load_track(self._generate_real_tracks(n, f, c))
+
+        self.bigwig_names = bigwig_names
+        return bigwig_names
 
     def extract_from_position(self, position, as_dataframe=False):
         """
