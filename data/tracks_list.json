@@ -79,14 +79,5 @@
         "id": 717,
         "log": false,
         "autoscaleGroup": 3
-    },
-    {
-        "name": "H3K27AC:GM12878_enformer",
-        "file": null,
-        "color": "BLUE",
-        "type": "enformer",
-        "id": 688,
-        "log": false,
-        "autoscaleGroup": 4
     }
 ]
