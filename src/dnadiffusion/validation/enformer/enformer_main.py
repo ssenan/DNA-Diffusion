@@ -4,33 +4,24 @@ from typing import List
 
 import numpy as np
 import pandas as pd
-import pybedtools
 from tqdm import tqdm
 
 from dnadiffusion import DATA_DIR
 from dnadiffusion.utils.data_util import seq_extract
-from validation.enformer.enformer import Enformer
-from validation.enformer.enformerops import EnformerOps
+from dnadiffusion.validation.enformer.enformer import Enformer
+from dnadiffusion.validation.enformer.enformerops import EnformerOps
+from dnadiffusion.validation.validation_utils import extract_enhancer_sequence
 
-os.environ['TF_XLA_FLAGS'] = '--tf_xla_auto_jit=2'
-
-
-def extract_enhancer_sequence(genome_path: str, chr: str, start: str, end: str, shuffle: bool = False):
-    a = pybedtools.BedTool(f"{chr} {start} {end}", from_string=True)
-    a = a.sequence(fi=f"{genome_path}")
-    sequence = open(a.seqfn).read().split("\n")[1]
-    if shuffle:
-        return ''.join(np.random.permutation(list(sequence)))
-    return sequence
+os.environ["TF_XLA_FLAGS"] = "--tf_xla_auto_jit=2"
 
 
 class EnformerBase:
     def __init__(
         self,
         region: str | None = None,
-        sequence_path: str = f'{DATA_DIR}/validation_dataset.txt',
-        model_path: str = 'https://tfhub.dev/deepmind/enformer/1',
-        modify_prefix: str = '1_',
+        sequence_path: str = f"{DATA_DIR}/validation_dataset.txt",
+        model_path: str = "https://tfhub.dev/deepmind/enformer/1",
+        modify_prefix: str = "1_",
         sequence_length: int = 393216,
         show_track: bool = False,
         demo: bool = False,
@@ -45,7 +36,7 @@ class EnformerBase:
         chrom_sizes = pd.read_table(f"{DATA_DIR}/hg38.chrom.sizes", header=None).set_index(0).to_dict()[1]
 
         # Loading tracks from json
-        with open(f"{DATA_DIR}/tracks_list.json", "r") as f:
+        with open(f"{DATA_DIR}/tracks_list.json") as f:
             tracks_list = json.load(f)
         self.eops.add_track(tracks_list)
 
@@ -85,6 +76,63 @@ class EnformerBase:
         print(f"Saving output to dnase_{self.region}_seqs.txt")
         df_out.to_csv(f"{DATA_DIR}/{self.region}_seqs.txt", sep="\t", index=False)
 
+    def capture_normalization_values(
+        self,
+        tag: str,
+        amount: int,
+    ):
+        """Capture values to be used for during quantile normalization of enformer tracks
+        Args:
+            sequence_path (str): Sequence path
+            tag (str): Tag to extract sequences (e.g. Random_genome_regions or Promoters)
+            amount (int): Amount of sequences to extract
+
+        Returns:
+            pd.DataFrame: DataFrame with values to be used for normalization
+        """
+        # sequence_region = self.enhancer_region
+
+        # Creating sample set of input tag dataframe
+        sequence_df = seq_extract(self.sequence_path, tag).sample(amount)
+
+        # Loading sequences into enformerops
+        sequences = sequence_df["SEQUENCE"].values.tolist()
+
+        # Selecting columns of interest
+        sequence_df = sequence_df[["chrom", "start", "end"]].values.tolist()
+
+        final_output = []
+
+        for chr_x, start_x, end_x in tqdm(sequence_df):
+            for seq in sequences:
+                self.eops.load_data([seq])
+            # Defining region to extract from
+            sequence_region = [chr_x, int(start_x), int(end_x)]
+            self.eops.generate_tracks(
+                self.model,
+                -1,
+                interval_list=sequence_region,
+                wildtype=True,
+                show_track=self.show_track,
+                modify_prefix=self.modify_prefix,
+            )
+
+            # Modifying sequence region to extract from
+            mod_start = int(sequence_region[1] + ((sequence_region[2] - sequence_region[1]) / 2)) - int(114688 / 2)
+            mod_end = int(sequence_region[1] + ((sequence_region[2] - sequence_region[1]) / 2)) + int(114688 / 2)
+            mod_sequence_region = [sequence_region[0], mod_start, mod_end]
+
+            # Extracting values from tracks
+            extracted_values = self.eops.extract_from_position(mod_sequence_region, as_dataframe=True)
+            final_output.append(extracted_values)
+
+        # Clearing sequence data from enformerops
+        self.eops.clear_data()
+
+        # Saving output to df and csv
+        df_out = pd.concat(final_output)
+        df_out.to_csv(f"{DATA_DIR}/{tag}_normalization_values.txt", sep="\t", index=False)
+
 
 class LocusVisualization(EnformerBase):
     def __init__(
@@ -95,7 +143,7 @@ class LocusVisualization(EnformerBase):
         id: str = "81695_GENERATED_K562",
         genome_path: str = f"{DATA_DIR}/hg38.fa",
         enhancer_region: List[str | int] = ["chrX", 48782929, 48783129],
-        gene_region: List[str | int] = ['chrX', 48785536, 48787536],
+        gene_region: List[str | int] = ["chrX", 48785536, 48787536],
         show_track: bool = False,
         wildtype_shuffle: bool = False,
         input_sequence: str | None = None,
@@ -146,7 +194,7 @@ class GeneratedEnformer(EnformerBase):
         tag: str,
         cell_type: str | None = None,
         enhancer_region: List[str | int] = ["chrX", 48782929, 48783129],
-        gene_region: List[str | int] = ['chrX', 48785536, 48787536],
+        gene_region: List[str | int] = ["chrX", 48785536, 48787536],
         save_interval: int = 10,
         show_track: bool = False,
         demo: bool = False,
@@ -194,7 +242,7 @@ class GeneratedEnformer(EnformerBase):
             out_in["TARGET_NAME"] = "GATA1_TSS_2K"
             captured_values_target.append(out_in)
 
-            if (i != 0) and ((i+1) % self.save_interval) == 0:
+            if (i != 0) and ((i + 1) % self.save_interval) == 0:
                 df_out_ENH = pd.DataFrame(
                     [x.values.tolist() for x in captured_values], columns=["ENHANCER_" + x for x in out_in.index]
                 )
@@ -204,7 +252,7 @@ class GeneratedEnformer(EnformerBase):
 
                 df_out = pd.concat([df_out_ENH, df_out_GENE], axis=1)
 
-                df_out.to_csv(f"{DATA_DIR}/{str(file_modify)}_test_seqs.TXT", sep="\t", index=False)
+                df_out.to_csv(f"{DATA_DIR}/{file_modify!s}_test_seqs.TXT", sep="\t", index=False)
                 # Resetting captured values
                 captured_values = []
                 captured_values_target = []
@@ -234,6 +282,63 @@ class GeneratedEnformer(EnformerBase):
         #
         # print(f"Saving output to {DATA_DIR}/{self.tag}_GENERATED_SEQS.TXT")
         # df_out.to_csv(f"{DATA_DIR}/" + self.tag + "_GENERATED_SEQS.TXT", sep="\t", index=False)
+
+    def capture_normalization_values(
+        self,
+        tag: str,
+        amount: int,
+    ):
+        """Capture values to be used for during quantile normalization of enformer tracks
+        Args:
+            sequence_path (str): Sequence path
+            tag (str): Tag to extract sequences (e.g. Random_genome_regions or Promoters)
+            amount (int): Amount of sequences to extract
+
+        Returns:
+            pd.DataFrame: DataFrame with values to be used for normalization
+        """
+        # sequence_region = self.enhancer_region
+
+        # Creating sample set of input tag dataframe
+        sequence_df = seq_extract(self.sequence_path, tag).sample(amount)
+
+        # Loading sequences into enformerops
+        sequences = sequence_df["SEQUENCE"].values.tolist()
+
+        # Selecting columns of interest
+        sequence_df = sequence_df[["chrom", "start", "end"]].values.tolist()
+
+        final_output = []
+
+        for chr_x, start_x, end_x in tqdm(sequence_df):
+            for seq in sequences:
+                self.eops.load_data([seq])
+            # Defining region to extract from
+            sequence_region = [chr_x, int(start_x), int(end_x)]
+            self.eops.generate_tracks(
+                self.model,
+                -1,
+                interval_list=sequence_region,
+                wildtype=True,
+                show_track=self.show_track,
+                modify_prefix=self.modify_prefix,
+            )
+
+            # Modifying sequence region to extract from
+            mod_start = int(sequence_region[1] + ((sequence_region[2] - sequence_region[1]) / 2)) - int(114688 / 2)
+            mod_end = int(sequence_region[1] + ((sequence_region[2] - sequence_region[1]) / 2)) + int(114688 / 2)
+            mod_sequence_region = [sequence_region[0], mod_start, mod_end]
+
+            # Extracting values from tracks
+            extracted_values = self.eops.extract_from_position(mod_sequence_region, as_dataframe=True)
+            final_output.append(extracted_values)
+
+        # Clearing sequence data from enformerops
+        self.eops.clear_data()
+
+        # Saving output to df and csv
+        df_out = pd.concat(final_output)
+        df_out.to_csv(f"{DATA_DIR}/{tag}_normalization_values.txt", sep="\t", index=False)
 
 
 if __name__ == "__main__":

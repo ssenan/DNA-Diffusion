@@ -8,8 +8,8 @@ import pandas as pd
 import pyBigWig
 
 from dnadiffusion import DATA_DIR
-from validation.enformer.enformer import Enformer, FastaStringExtractor
-from validation.enformer.enformer_utils import one_hot_encode
+from dnadiffusion.validation.enformer.enformer import Enformer, FastaStringExtractor
+from dnadiffusion.validation.enformer.enformer_utils import one_hot_encode
 
 
 @dataclass
@@ -26,8 +26,8 @@ class EnformerData:
 class EnformerOps(EnformerData):
     def __init__(self):
         super().__init__()
-        self.df_sizes: pd.DataFrame = pd.read_table(f'{DATA_DIR}/hg38.chrom.sizes', header=None).head(22)
-        self.fasta_extractor: FastaStringExtractor = FastaStringExtractor(f'{DATA_DIR}/hg38.fa')
+        self.df_sizes: pd.DataFrame = pd.read_table(f"{DATA_DIR}/hg38.chrom.sizes", header=None).head(24)
+        self.fasta_extractor: FastaStringExtractor = FastaStringExtractor(f"{DATA_DIR}/hg38.fa")
 
     def add_track(self, additional_tracks: Dict | List[Dict]):
         """
@@ -68,11 +68,15 @@ class EnformerOps(EnformerData):
         else:
             TypeError("input_sequence_path must be of type list")
 
+    def clear_data(self):
+        self.loaded_seqs = []
+        self.input_sequences_file_path = ""
+
     def generate_tracks(
         self,
         model: Enformer,
         sequence_number_thousand: int,
-        gene_region: List[str | int],
+        gene_region: List[str | int] | None = None,
         step: int = -1,
         interval_list: str | List[str] | None = None,
         show_track: bool = False,
@@ -209,20 +213,20 @@ class EnformerOps(EnformerData):
         for name in self.bigwig_names:
             bw = pyBigWig.open(name)
             values = bw.values(position[0], position[1], position[2])
-            results.append({'name': name, 'values': values})
+            results.append({"name": name, "values": values})
         if as_dataframe:
-            results = pd.DataFrame({k['name']: k['values'] for k in results})
+            results = pd.DataFrame({k["name"]: k["values"] for k in results})
 
         return results
 
     @staticmethod
     def predict_from_sequence(model, input_sequence):
         sequence_one_hot = one_hot_encode(input_sequence)
-        return model.predict_on_batch(sequence_one_hot[np.newaxis])['human'][0]
+        return model.predict_on_batch(sequence_one_hot[np.newaxis])["human"][0]
 
     @staticmethod
     def insert_seq(seq_mod_in: str, seq_x: str | None = None, dont_insert: bool = False):
-        '''
+        """
         This function inserts a sequence `seq_x` into a larger sequence `seq_mod_in`.
 
         Args:
@@ -233,13 +237,13 @@ class EnformerOps(EnformerData):
 
         Returns:
             str: The modified sequence with `seq_x` inserted into `seq_mod_in`.
-        '''
+        """
         seq_to_mod_array = np.array(list(seq_mod_in))
         seq_mod_center = seq_to_mod_array.shape[0] // 2
         if not dont_insert:
             seq_to_mod_array[seq_mod_center - 100 : seq_mod_center + 100] = np.array(list(seq_x))
 
-        return ''.join(seq_to_mod_array)
+        return "".join(seq_to_mod_array)
 
     def _enformer_bigwig_creation(self, chr_name, start, values, track_name, color, autoscaleGroup):
         """
