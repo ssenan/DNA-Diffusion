@@ -9,6 +9,7 @@ from tqdm import tqdm
 from dnadiffusion import DATA_DIR
 from dnadiffusion.utils.data_util import seq_extract
 from dnadiffusion.validation.enformer.enformer import Enformer
+from dnadiffusion.validation.enformer.enformer_utils import normalize_tracks
 from dnadiffusion.validation.enformer.enformerops import EnformerOps
 from dnadiffusion.validation.validation_utils import extract_enhancer_sequence
 
@@ -79,6 +80,7 @@ class EnformerBase:
     def capture_normalization_values(
         self,
         tag: str,
+        track_name: str,
         amount: int,
     ):
         """Capture values to be used for during quantile normalization of enformer tracks
@@ -90,8 +92,6 @@ class EnformerBase:
         Returns:
             pd.DataFrame: DataFrame with values to be used for normalization
         """
-        # sequence_region = self.enhancer_region
-
         # Creating sample set of input tag dataframe
         sequence_df = seq_extract(self.sequence_path, tag).sample(amount)
 
@@ -129,9 +129,10 @@ class EnformerBase:
         # Clearing sequence data from enformerops
         self.eops.clear_data()
 
-        # Saving output to df and csv
         df_out = pd.concat(final_output)
-        df_out.to_csv(f"{DATA_DIR}/{tag}_normalization_values.txt", sep="\t", index=False)
+        # Only selecting columns that contain "DNASE" in their name
+        df_out = df_out[df_out.columns[df_out.columns.str.contains(f"{track_name}")]]
+        df_out.to_csv(f"{DATA_DIR}/{track_name}_normalization_values.txt", sep="\t", index=False)
 
 
 class LocusVisualization(EnformerBase):
@@ -192,7 +193,6 @@ class GeneratedEnformer(EnformerBase):
     def __init__(
         self,
         tag: str,
-        cell_type: str | None = None,
         enhancer_region: List[str | int] = ["chrX", 48782929, 48783129],
         gene_region: List[str | int] = ["chrX", 48785536, 48787536],
         save_interval: int = 10,
@@ -206,9 +206,13 @@ class GeneratedEnformer(EnformerBase):
         self.save_interval = save_interval
         self.show_track = show_track
 
+        # Values for normalization
+        self.normalized_dnase_path = normalized_dnase_path
+        self.normalized_cage_path = normalized_cage_path
+
         all_sequences = seq_extract(self.sequence_path, tag)
-        # generated_seqs = all_sequences[all_sequences["TAG"] == "Generated"]
         self.all_sequences = all_sequences[["SEQUENCE", "ID"]].values.tolist()
+
         if demo:
             self.all_sequences = self.all_sequences[:50]
 
@@ -252,7 +256,7 @@ class GeneratedEnformer(EnformerBase):
 
                 df_out = pd.concat([df_out_ENH, df_out_GENE], axis=1)
 
-                df_out.to_csv(f"{DATA_DIR}/{file_modify!s}_test_seqs.TXT", sep="\t", index=False)
+                df_out.to_csv(f"{DATA_DIR}/{file_modify}_test_seqs.TXT", sep="\t", index=False)
                 # Resetting captured values
                 captured_values = []
                 captured_values_target = []
@@ -283,62 +287,59 @@ class GeneratedEnformer(EnformerBase):
         # print(f"Saving output to {DATA_DIR}/{self.tag}_GENERATED_SEQS.TXT")
         # df_out.to_csv(f"{DATA_DIR}/" + self.tag + "_GENERATED_SEQS.TXT", sep="\t", index=False)
 
-    def capture_normalization_values(
+
+class NormalizeTracks(EnformerBase):
+    def __init__(
         self,
-        tag: str,
-        amount: int,
+        input_sequence: str,
+        enhancer_region: List[str | int] = ["chrX", 48782929, 48783129],
+        gene_region: List[str | int] = ["chrX", 48785536, 48787536],
+        normalized_dnase_path: str = f"{DATA_DIR}/DNASE_normalization_values.txt",
+        normalized_cage_path: str = f"{DATA_DIR}/CAGE_normalization_values.txt",
+        normalized_h3k4me3_path: str = f"{DATA_DIR}/H3K4ME3_normalization_values.txt",
     ):
-        """Capture values to be used for during quantile normalization of enformer tracks
-        Args:
-            sequence_path (str): Sequence path
-            tag (str): Tag to extract sequences (e.g. Random_genome_regions or Promoters)
-            amount (int): Amount of sequences to extract
+        super().__init__()
+        self.input_sequence = input_sequence
+        self.enhancer_region = enhancer_region
+        self.gene_region = gene_region
+        self.normalized_dnase_rgr = pd.read_csv(normalized_dnase_path, sep="\t")
+        self.normalized_cage_promoters = pd.read_csv(normalized_cage_path, sep="\t")
+        self.normalized_h3k4me3_promoters = pd.read_csv(normalized_h3k4me3_path, sep="\t")
 
-        Returns:
-            pd.DataFrame: DataFrame with values to be used for normalization
-        """
-        # sequence_region = self.enhancer_region
+    def extract(self):
+        # Processing sequence of interest
+        self.eops.load_data([self.input_sequence])
+        # Creating tracks
+        self.eops.generate_tracks(self.model, -1, interval_list=self.enhancer_region, wildtype=False, show_track=False)
+        # Extracting values from tracks
+        mod_start = int(self.enhancer_region[1] + ((self.enhancer_region[2] - self.enhancer_region[1]) / 2)) - int(
+            114688 / 2
+        )
+        mod_end = int(self.enhancer_region[1] + ((self.enhancer_region[2] - self.enhancer_region[1]) / 2)) + int(
+            114688 / 2
+        )
+        mod_sequence_region = [self.enhancer_region[0], mod_start, mod_end]
+        extracted_values = self.eops.extract_from_position(mod_sequence_region, as_dataframe=True)
 
-        # Creating sample set of input tag dataframe
-        sequence_df = seq_extract(self.sequence_path, tag).sample(amount)
+        # Normalizing DNASE values
+        extracted_values_dnase = extracted_values[[x for x in extracted_values.columns if "DNASE" in x]]
+        normalized_dnase = normalize_tracks(extracted_values_dnase, self.normalized_dnase_rgr)
+        # Normalizing CAGE values
+        extracted_values_cage = extracted_values[[x for x in extracted_values.columns if "CAGE" in x]]
+        normalized_cage = normalize_tracks(extracted_values_cage, self.normalized_cage_promoters)
+        # Normalizing H3K4ME3 values
+        extracted_values_h3k4me3 = extracted_values[[x for x in extracted_values.columns if "H3K4ME3" in x]]
+        normalized_h3k4me3 = normalize_tracks(extracted_values_h3k4me3, self.normalized_h3k4me3_promoters)
 
-        # Loading sequences into enformerops
-        sequences = sequence_df["SEQUENCE"].values.tolist()
+        # Concatenating normalized values
+        normalized_values = pd.concat([normalized_dnase, normalized_cage, normalized_h3k4me3], axis=1)
 
-        # Selecting columns of interest
-        sequence_df = sequence_df[["chrom", "start", "end"]].values.tolist()
-
-        final_output = []
-
-        for chr_x, start_x, end_x in tqdm(sequence_df):
-            for seq in sequences:
-                self.eops.load_data([seq])
-            # Defining region to extract from
-            sequence_region = [chr_x, int(start_x), int(end_x)]
-            self.eops.generate_tracks(
-                self.model,
-                -1,
-                interval_list=sequence_region,
-                wildtype=True,
-                show_track=self.show_track,
-                modify_prefix=self.modify_prefix,
-            )
-
-            # Modifying sequence region to extract from
-            mod_start = int(sequence_region[1] + ((sequence_region[2] - sequence_region[1]) / 2)) - int(114688 / 2)
-            mod_end = int(sequence_region[1] + ((sequence_region[2] - sequence_region[1]) / 2)) + int(114688 / 2)
-            mod_sequence_region = [sequence_region[0], mod_start, mod_end]
-
-            # Extracting values from tracks
-            extracted_values = self.eops.extract_from_position(mod_sequence_region, as_dataframe=True)
-            final_output.append(extracted_values)
-
-        # Clearing sequence data from enformerops
-        self.eops.clear_data()
-
-        # Saving output to df and csv
-        df_out = pd.concat(final_output)
-        df_out.to_csv(f"{DATA_DIR}/{tag}_normalization_values.txt", sep="\t", index=False)
+        self.eops.generate_normalized_tracks(
+            normalized_values,
+            self.gene_region,
+            self.enhancer_region,
+        )
+        print("Finished normalizing tracks")
 
 
 if __name__ == "__main__":
@@ -348,4 +349,10 @@ if __name__ == "__main__":
     # print(f"Running Enformer for {tag}")
     # print(10 *"=")
     # GeneratedEnformer(tag=tag).extract()
-    GeneratedEnformer(tag="Generated", demo=True).extract()
+    # GeneratedEnformer(tag="Generated", demo=True).extract()
+    # EnformerBase(region="Random_Genome_Regions").capture_normalization_values(
+    #     tag="Promoters", track_name="CAGE", amount=100
+    # )
+    NormalizeTracks(
+        input_sequence="GCAACTTACAACCACAGAATTCAGTTCTCAAAATAGGACACAGAGAAAGTGAGACTGAGAAGTGTGGAAATTCCCCCAGCCTGTCGGACTGGACTAATGTTTCATTCGTAATTAGGTACAAAAAAGCCATCAGTACAGTGGAAAGCAGGGAGTTCAGATGTGACATATAATTCTTTTTCCCTATTCACTTTCTCTTCCCT"
+    ).extract()

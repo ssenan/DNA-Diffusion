@@ -1,11 +1,15 @@
 import gzip
 
 import kipoiseq
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import seaborn as sns
 from kipoiseq import Interval
 
+from dnadiffusion import DATA_DIR
 from dnadiffusion.validation.enformer.enformer import FastaStringExtractor
+from dnadiffusion.validation.validation_utils import quantile_normalization
 
 
 def variant_generator(vcf_file, gzipped=False):
@@ -61,3 +65,17 @@ def plot_tracks(tracks, interval, height=1.5, color="blue", set_y=False):
     # plt.tight_layout()
     if set_y:
         plt.ylim(set_y[0], set_y[1])
+
+
+def normalize_tracks(df_to_normalize: pd.DataFrame, normalize_df_helper: pd.DataFrame, boxplot: bool = False):
+    tranpose_data = pd.concat([df_to_normalize.T, normalize_df_helper.T], axis=1)
+    df_normalized = pd.DataFrame(quantile_normalization(tranpose_data.values.T))
+    df_normalized.columns = tranpose_data.index
+    output_tracks = df_normalized.head(df_to_normalize.shape[0])
+
+    if boxplot:
+        sns.boxplot(x="Variable", y="value", data=output_tracks.melt())
+        # Save the plot
+        plt.savefig(f"{DATA_DIR}/boxplot.png", dpi=300)
+
+    return output_tracks

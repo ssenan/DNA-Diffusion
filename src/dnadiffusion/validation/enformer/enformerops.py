@@ -190,7 +190,60 @@ class EnformerOps(EnformerData):
                     b.load_track(self._generate_real_tracks(n, f, c))
 
         self.bigwig_names = bigwig_names
-        return bigwig_names
+
+    def generate_normalized_tracks(
+        self,
+        all_values: np.array,
+        gene_region: List[str | int],
+        enhancer_region: List[str | int],
+        view_region_offset: int = 10000,
+        show_track: bool = False,
+    ):
+        bigwig_names = []
+        if show_track:
+            igv_notebook.init()
+            b = igv_notebook.Browser(
+                {
+                    "genome": "hg38",
+                    "locus": f"{gene_region[0]}:{gene_region[1]-view_region_offset}-{gene_region[1]+view_region_offset}",
+                    "roi": [
+                        # Gene Region
+                        {
+                            "name": "Gene",
+                            "color": "rgba(3,52,249,0.25)",
+                            "features": [
+                                {"chr": gene_region[0], "start": gene_region[1], "end": gene_region[2]},
+                            ],
+                        },
+                        {
+                            "name": "Enhancer",
+                            "color": "rgba(255, 0, 0, 0.25)",
+                            "features": [
+                                {"chr": enhancer_region[0], "start": enhancer_region[1], "end": enhancer_region[2]},
+                            ],
+                        },
+                    ],
+                }
+            )
+        for track in self.tracks:
+            current_values = all_values[track["name"] + ".bw"].values
+            curr_name = "normalized_" + track["name"]
+            print(curr_name)
+            curr_color = track["color"]
+            curr_autoscaleGroup = track["autoscaleGroup"]
+
+            out_track = self.normalized_bigwig(
+                gene_region[0], gene_region[1], current_values, curr_name, curr_color, curr_autoscaleGroup
+            )
+            bigwig_names.append(curr_name + ".bw")
+            if show_track:
+                b.load_track(out_track)
+
+        self.bigwig_names = bigwig_names
+
+        # Save plots
+        if show_track:
+            b.to_svg()
 
     def extract_from_position(self, position, as_dataframe=False):
         """
@@ -267,6 +320,40 @@ class EnformerOps(EnformerData):
         values_conversion = (values * 1000).astype(np.int64) + 0.0
         bw.addEntries(
             chr_name, [start + (128 * x) for x in range(values_conversion.shape[0])], values=values_conversion, span=128
+        )
+
+        return {
+            "name": f"{track_name}",
+            "path": f"{track_name}.bw",
+            "format": "bigwig",
+            "displayMode": "EXPANDED",
+            "color": f"{color}",
+            "height": 100,
+            "autoscaleGroup": f"{autoscaleGroup}",
+        }
+
+    def normalized_bigwig(self, chr_name, start, values, track_name, color, autoscaleGroup):
+        """
+        Creates a bigwig file for an Enformer track.
+
+        Args:
+            chr_name (str): The name of the chromosome.
+            start (int): The start position of the track.
+            values (np.array): The values to be used in the track.
+            track_name (str): The name of the track.
+            color (str, optional): The color to use for the track. Default is 'BLUE'.
+
+        Returns:
+            dict: A dictionary containing the name and path of the bigwig file,
+            as well as its format, display mode, and color.
+        """
+
+        t_name = f"{track_name}.bw"
+        bw = pyBigWig.open(t_name, "w")
+        bw.addHeader([(chr_name, coord) for chr_name, coord in self.df_sizes.values])
+        values_conversion = values.astype(np.int64) + 0.0
+        bw.addEntries(
+            chr_name, [start + x for x in range(values_conversion.shape[0])], values=values_conversion, span=1
         )
 
         return {
