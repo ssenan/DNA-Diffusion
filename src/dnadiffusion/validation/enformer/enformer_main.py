@@ -206,10 +206,6 @@ class GeneratedEnformer(EnformerBase):
         self.save_interval = save_interval
         self.show_track = show_track
 
-        # Values for normalization
-        self.normalized_dnase_path = normalized_dnase_path
-        self.normalized_cage_path = normalized_cage_path
-
         all_sequences = seq_extract(self.sequence_path, tag)
         self.all_sequences = all_sequences[["SEQUENCE", "ID"]].values.tolist()
 
@@ -297,6 +293,7 @@ class NormalizeTracks(EnformerBase):
         normalized_dnase_path: str = f"{DATA_DIR}/DNASE_normalization_values.txt",
         normalized_cage_path: str = f"{DATA_DIR}/CAGE_normalization_values.txt",
         normalized_h3k4me3_path: str = f"{DATA_DIR}/H3K4ME3_normalization_values.txt",
+        view_offset: int = 30000,
     ):
         super().__init__()
         self.input_sequence = input_sequence
@@ -305,6 +302,7 @@ class NormalizeTracks(EnformerBase):
         self.normalized_dnase_rgr = pd.read_csv(normalized_dnase_path, sep="\t")
         self.normalized_cage_promoters = pd.read_csv(normalized_cage_path, sep="\t")
         self.normalized_h3k4me3_promoters = pd.read_csv(normalized_h3k4me3_path, sep="\t")
+        self.view_offset = view_offset
 
     def extract(self):
         # Processing sequence of interest
@@ -333,13 +331,26 @@ class NormalizeTracks(EnformerBase):
 
         # Concatenating normalized values
         normalized_values = pd.concat([normalized_dnase, normalized_cage, normalized_h3k4me3], axis=1)
+        # Turning self.enhancer_region list into a bed file and saving
+        with open(f"{DATA_DIR}/view_region.bed", "w") as f:
+            f.write(
+                f"{self.gene_region[0]}\t{self.gene_region[1]-self.view_offset}\t{self.gene_region[2]+self.view_offset}\n"
+            )
 
-        self.eops.generate_normalized_tracks(
+        visualize_files = self.eops.igv_reports_tracks(
             normalized_values,
-            self.gene_region,
             self.enhancer_region,
         )
-        print("Finished normalizing tracks")
+        # Running igv_reports
+        os.system(
+            f"create_report {DATA_DIR}/view_region.bed \
+            --fasta {DATA_DIR}/hg38.fa\
+            --flanking 50000 \
+            --track-config {DATA_DIR}/track_config.json \
+            --output {DATA_DIR}/igv_report.html \
+            "
+        )
+        print("Generated igv report")
 
 
 if __name__ == "__main__":
@@ -354,5 +365,7 @@ if __name__ == "__main__":
     #     tag="Promoters", track_name="CAGE", amount=100
     # )
     NormalizeTracks(
-        input_sequence="GCAACTTACAACCACAGAATTCAGTTCTCAAAATAGGACACAGAGAAAGTGAGACTGAGAAGTGTGGAAATTCCCCCAGCCTGTCGGACTGGACTAATGTTTCATTCGTAATTAGGTACAAAAAAGCCATCAGTACAGTGGAAAGCAGGGAGTTCAGATGTGACATATAATTCTTTTTCCCTATTCACTTTCTCTTCCCT"
+        input_sequence="GCAACTTACAACCACAGAATTCAGTTCTCAAAATAGGACACAGAGAAAGTGAGACTGAGAAGTGTGGAAATTCCCCCAGCCTGTCGGACTGGACTAATGTTTCATTCGTAATTAGGTACAAAAAAGCCATCAGTACAGTGGAAAGCAGGGAGTTCAGATGTGACATATAATTCTTTTTCCCTATTCACTTTCTCTTCCCT",
+        enhancer_region=["chr22", 47631653, 47631654],
+        gene_region=["chr22", 47631653, 47631654],
     ).extract()

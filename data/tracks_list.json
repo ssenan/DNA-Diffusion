@@ -1,7 +1,10 @@
 [
     {
-        "name": "DNASE:GM12878_enformer",
+        "type": "wig",
+        "name": "DNASE_GM12878_enformer",
         "file": null,
+        "format": "bedGraph",
+        "url": "./normalized_DNASE_GM12878_enformer.bedgraph",
         "color": "BLUE",
         "type": "enformer",
         "id": 12,
@@ -9,8 +12,11 @@
         "autoscaleGroup": 1
     },
     {
-        "name": "DNASE:K562_enformer",
+        "type": "wig",
+        "name": "DNASE_K562_enformer",
         "file": null,
+        "format": "bedGraph",
+        "url": "./normalized_DNASE_K562_enformer.bedgraph",
         "color": "RED",
         "type": "enformer",
         "id": 121,
@@ -18,8 +24,11 @@
         "autoscaleGroup": 1
     },
     {
-        "name": "DNASE:HepG2_enformer",
+        "type": "wig",
+        "name": "DNASE_HepG2_enformer",
         "file": null,
+        "format": "bedGraph",
+        "url": "./normalized_DNASE_HepG2_enformer.bedgraph",
         "color": "BLACK",
         "type": "enformer",
         "id": 27,
@@ -27,35 +36,47 @@
         "autoscaleGroup": 1
     },
     {
-        "name": "CAGE:GM12878_enformer",
+        "type": "wig",
+        "name": "CAGE_GM12878_enformer",
         "file": null,
+        "format": "bedGraph",
+        "url": "./normalized_CAGE_GM12878_enformer.bedgraph",
         "color": "BLUE",
         "type": "enformer",
         "id": 5110,
-        "log": true,
+        "log": false,
         "autoscaleGroup": 2
     },
     {
-        "name": "CAGE:K562_enformer",
+        "type": "wig",
+        "name": "CAGE_K562_enformer",
         "file": null,
+        "format": "bedGraph",
+        "url": "./normalized_CAGE_K562_enformer.bedgraph",
         "color": "RED",
         "type": "enformer",
         "id": 5111,
-        "log": true,
+        "log": false,
         "autoscaleGroup": 2
     },
     {
-        "name": "CAGE:HepG2_enformer",
+        "type": "wig",
+        "name": "CAGE_HepG2_enformer",
         "file": null,
+        "format": "bedGraph",
+        "url": "./normalized_CAGE_HepG2_enformer.bedgraph",
         "color": "BLACK",
         "type": "enformer",
         "id": 5109,
-        "log": true,
+        "log": false,
         "autoscaleGroup": 2
     },
     {
-        "name": "H3K4ME3:GM12878_enformer",
+        "type": "wig",
+        "name": "H3K4ME3_GM12878_enformer",
         "file": null,
+        "format": "bedGraph",
+        "url": "./normalized_H3K4ME3_GM12878_enformer.bedgraph",
         "color": "BLUE",
         "type": "enformer",
         "id": 686,
@@ -63,8 +84,11 @@
         "autoscaleGroup": 3
     },
     {
-        "name": "H3K4ME3:K562_enformer",
+        "type": "wig",
+        "name": "H3K4ME3_K562_enformer",
         "file": null,
+        "format": "bedGraph",
+        "url": "./normalized_H3K4ME3_K562_enformer.bedgraph",
         "color": "RED",
         "type": "enformer",
         "id": 701,
@@ -72,8 +96,11 @@
         "autoscaleGroup": 3
     },
     {
-        "name": "H3K4ME3:HEPG2_enformer",
+        "type": "wig",
+        "name": "H3K4ME3_HEPG2_enformer",
         "file": null,
+        "format": "bedGraph",
+        "url": "./normalized_H3K4ME3_HEPG2_enformer.bedgraph",
         "color": "BLACK",
         "type": "enformer",
         "id": 717,

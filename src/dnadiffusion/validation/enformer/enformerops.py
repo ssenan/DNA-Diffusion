@@ -1,3 +1,4 @@
+import subprocess
 from dataclasses import dataclass, field
 from typing import Dict, List
 
@@ -176,7 +177,7 @@ class EnformerOps(EnformerData):
                 p_values = predictions[:, id]
                 if lg == True:
                     p_values = np.log10(1 + predictions[:, id])
-                bigwig_names.append(n + ".bw")
+                bigwig_names.append(n + ".bigwig")
                 out_track = self._enformer_bigwig_creation(chr_test, mod_start, p_values, n, color, autoscaleGroup)
                 if show_track:
                     b.load_track(out_track)
@@ -200,42 +201,16 @@ class EnformerOps(EnformerData):
         show_track: bool = False,
     ):
         bigwig_names = []
-        if show_track:
-            igv_notebook.init()
-            b = igv_notebook.Browser(
-                {
-                    "genome": "hg38",
-                    "locus": f"{gene_region[0]}:{gene_region[1]-view_region_offset}-{gene_region[1]+view_region_offset}",
-                    "roi": [
-                        # Gene Region
-                        {
-                            "name": "Gene",
-                            "color": "rgba(3,52,249,0.25)",
-                            "features": [
-                                {"chr": gene_region[0], "start": gene_region[1], "end": gene_region[2]},
-                            ],
-                        },
-                        {
-                            "name": "Enhancer",
-                            "color": "rgba(255, 0, 0, 0.25)",
-                            "features": [
-                                {"chr": enhancer_region[0], "start": enhancer_region[1], "end": enhancer_region[2]},
-                            ],
-                        },
-                    ],
-                }
-            )
         for track in self.tracks:
-            current_values = all_values[track["name"] + ".bw"].values
+            current_values = all_values[track["name"] + ".bigwig"].values
             curr_name = "normalized_" + track["name"]
-            print(curr_name)
             curr_color = track["color"]
             curr_autoscaleGroup = track["autoscaleGroup"]
 
             out_track = self.normalized_bigwig(
                 gene_region[0], gene_region[1], current_values, curr_name, curr_color, curr_autoscaleGroup
             )
-            bigwig_names.append(curr_name + ".bw")
+            bigwig_names.append(curr_name + ".bigwig")
             if show_track:
                 b.load_track(out_track)
 
@@ -244,6 +219,36 @@ class EnformerOps(EnformerData):
         # Save plots
         if show_track:
             b.to_svg()
+
+    def igv_reports_tracks(
+        self,
+        all_values: np.array,
+        enhancer_region: List[str | int],
+    ):
+        bigwig_names = []
+        mod_start = int(enhancer_region[1] + ((enhancer_region[2] - enhancer_region[1]) / 2)) - int(114688 / 2)
+        for track in self.tracks:
+            current_values = all_values[track["name"] + ".bigwig"].values
+            curr_name = "normalized_" + track["name"]
+            print(curr_name)
+            curr_color = track["color"]
+            curr_autoscaleGroup = track["autoscaleGroup"]
+
+            out_track = self.normalized_bigwig(
+                enhancer_region[0], mod_start, current_values, curr_name, curr_color, curr_autoscaleGroup
+            )
+
+            # Generate corresponding wig file
+            subprocess.run(
+                f"./src/dnadiffusion/validation/bigWigToBedGraph {curr_name}.bigwig {curr_name}.bedgraph",
+                check=True,
+                shell=True,
+            )
+            bigwig_names.append(curr_name + ".bedgraph")
+
+        return bigwig_names
+
+        # Save plots
 
     def extract_from_position(self, position, as_dataframe=False):
         """
@@ -314,7 +319,7 @@ class EnformerOps(EnformerData):
             as well as its format, display mode, and color.
         """
 
-        t_name = f"{track_name}.bw"
+        t_name = f"{track_name}.bigwig"
         bw = pyBigWig.open(t_name, "w")
         bw.addHeader([(chr_name, coord) for chr_name, coord in self.df_sizes.values])
         values_conversion = (values * 1000).astype(np.int64) + 0.0
@@ -324,7 +329,7 @@ class EnformerOps(EnformerData):
 
         return {
             "name": f"{track_name}",
-            "path": f"{track_name}.bw",
+            "path": f"{track_name}.bigwig",
             "format": "bigwig",
             "displayMode": "EXPANDED",
             "color": f"{color}",
@@ -348,9 +353,12 @@ class EnformerOps(EnformerData):
             as well as its format, display mode, and color.
         """
 
-        t_name = f"{track_name}.bw"
+        t_name = f"{track_name}.bigwig"
         bw = pyBigWig.open(t_name, "w")
         bw.addHeader([(chr_name, coord) for chr_name, coord in self.df_sizes.values])
+        # REMOVE THIS
+        print(f"Values: {values}")
+        # REMOVE THIS
         values_conversion = values.astype(np.int64) + 0.0
         bw.addEntries(
             chr_name, [start + x for x in range(values_conversion.shape[0])], values=values_conversion, span=1
@@ -358,7 +366,7 @@ class EnformerOps(EnformerData):
 
         return {
             "name": f"{track_name}",
-            "path": f"{track_name}.bw",
+            "path": f"{track_name}.bigwig",
             "format": "bigwig",
             "displayMode": "EXPANDED",
             "color": f"{color}",
