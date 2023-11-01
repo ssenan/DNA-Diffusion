@@ -26,6 +26,7 @@ class EnformerBase:
         sequence_length: int = 393216,
         show_track: bool = False,
         demo: bool = False,
+        save_interval: int = 100,
     ):
         self.model = Enformer(model_path)
         self.eops = EnformerOps()
@@ -33,6 +34,7 @@ class EnformerBase:
         self.region = region
         self.modify_prefix = modify_prefix
         self.show_track = show_track
+        self.save_interval = save_interval
 
         chrom_sizes = pd.read_table(f"{DATA_DIR}/hg38.chrom.sizes", header=None).set_index(0).to_dict()[1]
 
@@ -51,11 +53,12 @@ class EnformerBase:
         ]
         if demo:
             print(len(self.all_sequences))
-            self.all_sequences = self.all_sequences[2050:2070]
+            self.all_sequences = self.all_sequences[:200]
 
     def extract(self):
+        file_modify = 1
         captured_values = []
-        for s in tqdm(self.all_sequences):
+        for i, s in tqdm(enumerate(self.all_sequences), total=len(self.all_sequences)):
             s_in = [s[0], int(s[1]), int(s[2])]
             id_seq = s[3]
             self.eops.generate_tracks(
@@ -71,12 +74,25 @@ class EnformerBase:
             out_in["SEQ_ID"] = id_seq
             out_in["TARGET_NAME"] = "ITSELF"
             captured_values.append(out_in)
-        df_out = pd.DataFrame([x.values.tolist() for x in captured_values], columns=out_in.index)
+            if (i != 0) and ((i + 1) % self.save_interval) == 0:
+                df_out = pd.DataFrame([x.values.tolist() for x in captured_values], columns=out_in.index)
+                df_out.to_csv(f"{DATA_DIR}/{file_modify}_test_seqs.TXT", sep="\t", index=False)
+                # Resetting captured values
+                captured_values = []
+                file_modify += 1
+
+        # Find all the files written to DATA_DIR from the above loop
+        files = sorted([f"{DATA_DIR}/{f}" for f in os.listdir(DATA_DIR) if f.endswith("_test_seqs.TXT")])
+
+        df_out = pd.concat([pd.read_csv(f, sep="\t") for f in files], axis=0)
 
         # Save output
-        print(f"Saving output to dnase_{self.region}_seqs.txt")
-        df_out.to_csv(f"{DATA_DIR}/{self.region}_seqs.txt", sep="\t", index=False)
+        print(f"Saving output to {DATA_DIR}/{self.region}_test_seqs_final.TXT")
+        df_out.to_csv(f"{DATA_DIR}/{self.region}_test_seqs_final.TXT", sep="\t", index=False)
 
+        # Remove all the files written to DATA_DIR from the above loop
+        for f in files:
+            os.remove(f)
     def capture_normalization_values(
         self,
         tag: str,
@@ -354,18 +370,19 @@ class NormalizeTracks(EnformerBase):
 
 
 if __name__ == "__main__":
-    # EnformerBase(region="Promoters").extract()
-    # EnformerBase(region="Random_Genome_Regions", demo=True).extract()
-    # for tag in ["Generated", "GM12878_positive", "HepG2_positive", "Test", "Training", "Validation", "Negative"]:
-    # print(f"Running Enformer for {tag}")
-    # print(10 *"=")
-    # GeneratedEnformer(tag=tag).extract()
+    EnformerBase(region="Promoters").extract()
+    EnformerBase(region="Random_Genome_Regions").extract()
+    for tag in ["Generated", "GM12878_positive", "HepG2_positive", "Test", "Training", "Validation", "Negative"]:
+        print(f"Running Enformer for {tag}")
+        print(10 *"=")
+        GeneratedEnformer(tag=tag).extract()
     # GeneratedEnformer(tag="Generated", demo=True).extract()
     # EnformerBase(region="Random_Genome_Regions").capture_normalization_values(
     #     tag="Promoters", track_name="CAGE", amount=100
     # )
-    NormalizeTracks(
+    """NormalizeTracks(
         input_sequence="GCAACTTACAACCACAGAATTCAGTTCTCAAAATAGGACACAGAGAAAGTGAGACTGAGAAGTGTGGAAATTCCCCCAGCCTGTCGGACTGGACTAATGTTTCATTCGTAATTAGGTACAAAAAAGCCATCAGTACAGTGGAAAGCAGGGAGTTCAGATGTGACATATAATTCTTTTTCCCTATTCACTTTCTCTTCCCT",
         enhancer_region=["chr22", 47631653, 47631654],
         gene_region=["chr22", 47631653, 47631654],
     ).extract()
+    """
