@@ -72,7 +72,7 @@
         "autoscaleGroup": 3
     },
     {
-        "name": "H3K4ME3_HEPG2_enformer",
+        "name": "H3K4ME3_HepG2_enformer",
         "file": null,
         "color": "BLACK",
         "type": "enformer",

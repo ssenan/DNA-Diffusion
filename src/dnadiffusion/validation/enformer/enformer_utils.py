@@ -1,9 +1,12 @@
 import gzip
+import json
+import re
 
 import kipoiseq
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import pyBigWig
 import seaborn as sns
 from kipoiseq import Interval
 
@@ -74,8 +77,52 @@ def normalize_tracks(df_to_normalize: pd.DataFrame, normalize_df_helper: pd.Data
     output_tracks = df_normalized.head(df_to_normalize.shape[0])
 
     if boxplot:
-        sns.boxplot(x="Variable", y="value", data=output_tracks.melt())
+        plt.clf()
+        sns.boxplot(x="variable", y="value", data=output_tracks.melt())
         # Save the plot
         plt.savefig(f"{DATA_DIR}/boxplot.png", dpi=300)
 
     return output_tracks
+
+
+def extract_value_json(
+    json_path: str,
+    big_wig_files: list,
+    gene_region: list,
+    gene_region_offset: int = 1000,
+):
+    # Collect file names 3 at a time
+    max_dict = {}
+    for i in range(0, len(sorted(big_wig_files)), 3):
+        curr_files = big_wig_files[i : i + 3]
+        # For each group of 3 files, collect the max value for each file
+        curr_max = []
+        for file in curr_files:
+            bw = pyBigWig.open(file)
+            curr_max.append(
+                bw.stats(
+                    gene_region[0], gene_region[1] - gene_region_offset, gene_region[2] + gene_region_offset, type="max"
+                )[0]
+            )
+            bw.close()
+        # add the max values to the dictionary for each individual file
+        for file in curr_files:
+            # replace extension with .bedgraph
+            file_rename = file.replace(".bigwig", ".bedgraph")
+            max_dict[file_rename] = max(curr_max) * 1.5
+
+    with open(json_path) as json_file:
+        data = json.load(json_file)
+
+    # Match the max values to the correct file in the json
+    for track in data:
+        if track["url"] in max_dict.keys():
+            # Using regex replace each instance of <"value"> with the max value
+            track["max"] = track["max"].replace("<value>", str(max_dict[track["url"]]))
+
+    # Writing the updated json file
+    output_name = "_".join([str(i) for i in gene_region])
+    with open(f"{DATA_DIR}/{output_name}.json", "w") as json_file:
+        json.dump(data, json_file, indent=4)
+
+    return output_name + ".json"

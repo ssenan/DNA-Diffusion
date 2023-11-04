@@ -239,12 +239,12 @@ class EnformerOps(EnformerData):
             )
 
             # Generate corresponding wig file
-            subprocess.run(
-                f"./src/dnadiffusion/validation/bigWigToBedGraph {curr_name}.bigwig {curr_name}.bedgraph",
-                check=True,
-                shell=True,
-            )
-            bigwig_names.append(curr_name + ".bedgraph")
+            # subprocess.run(
+            #     f"./src/dnadiffusion/validation/bigWigToBedGraph {curr_name}.bigwig {curr_name}.bedgraph",
+            #     check=True,
+            #     shell=True,
+            # )
+            bigwig_names.append(curr_name + ".bigwig")
 
         return bigwig_names
 
@@ -356,9 +356,6 @@ class EnformerOps(EnformerData):
         t_name = f"{track_name}.bigwig"
         bw = pyBigWig.open(t_name, "w")
         bw.addHeader([(chr_name, coord) for chr_name, coord in self.df_sizes.values])
-        # REMOVE THIS
-        print(f"Values: {values}")
-        # REMOVE THIS
         values_conversion = values.astype(np.int64) + 0.0
         bw.addEntries(
             chr_name, [start + x for x in range(values_conversion.shape[0])], values=values_conversion, span=1

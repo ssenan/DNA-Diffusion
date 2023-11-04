@@ -9,7 +9,7 @@ from tqdm import tqdm
 from dnadiffusion import DATA_DIR
 from dnadiffusion.utils.data_util import seq_extract
 from dnadiffusion.validation.enformer.enformer import Enformer
-from dnadiffusion.validation.enformer.enformer_utils import normalize_tracks
+from dnadiffusion.validation.enformer.enformer_utils import extract_value_json, normalize_tracks
 from dnadiffusion.validation.enformer.enformerops import EnformerOps
 from dnadiffusion.validation.validation_utils import extract_enhancer_sequence
 
@@ -22,7 +22,7 @@ class EnformerBase:
         region: str | None = None,
         sequence_path: str = f"{DATA_DIR}/validation_dataset.txt",
         model_path: str = "https://tfhub.dev/deepmind/enformer/1",
-        modify_prefix: str = "1_",
+        modify_prefix: str = "",
         sequence_length: int = 393216,
         show_track: bool = False,
         demo: bool = False,
@@ -93,6 +93,7 @@ class EnformerBase:
         # Remove all the files written to DATA_DIR from the above loop
         for f in files:
             os.remove(f)
+
     def capture_normalization_values(
         self,
         tag: str,
@@ -309,7 +310,7 @@ class NormalizeTracks(EnformerBase):
         normalized_dnase_path: str = f"{DATA_DIR}/DNASE_normalization_values.txt",
         normalized_cage_path: str = f"{DATA_DIR}/CAGE_normalization_values.txt",
         normalized_h3k4me3_path: str = f"{DATA_DIR}/H3K4ME3_normalization_values.txt",
-        view_offset: int = 30000,
+        view_offset: int = 10000,
     ):
         super().__init__()
         self.input_sequence = input_sequence
@@ -353,36 +354,48 @@ class NormalizeTracks(EnformerBase):
                 f"{self.gene_region[0]}\t{self.gene_region[1]-self.view_offset}\t{self.gene_region[2]+self.view_offset}\n"
             )
 
-        visualize_files = self.eops.igv_reports_tracks(
+        bigwig_files = self.eops.igv_reports_tracks(
             normalized_values,
             self.enhancer_region,
         )
-        # Running igv_reports
-        os.system(
-            f"create_report {DATA_DIR}/view_region.bed \
-            --fasta {DATA_DIR}/hg38.fa\
-            --flanking 50000 \
-            --track-config {DATA_DIR}/track_config.json \
-            --output {DATA_DIR}/igv_report.html \
-            "
+        # Extracting max_values from tracks to write to json config
+        json_config = extract_value_json(
+            f"{DATA_DIR}/track_config.json",
+            bigwig_files,
+            self.enhancer_region,
         )
+
+        # Running igv_reports
+        # os.system(
+        #     f"create_report {DATA_DIR}/view_region.bed \
+        #     --fasta {DATA_DIR}/hg38.fa\
+        #     --flanking 50000 \
+        #     --roi {DATA_DIR}/roi.json \
+        #     --track-config {DATA_DIR}/{json_config} \
+        #     --output {DATA_DIR}/igv_report.html \
+        #     "
+        # )
         print("Generated igv report")
 
 
 if __name__ == "__main__":
-    EnformerBase(region="Promoters").extract()
-    EnformerBase(region="Random_Genome_Regions").extract()
-    for tag in ["Generated", "GM12878_positive", "HepG2_positive", "Test", "Training", "Validation", "Negative"]:
+    # EnformerBase(region="Promoters").extract()
+    # EnformerBase(region="Random_Genome_Regions").extract()
+    """for tag in ["Generated", "GM12878_positive", "HepG2_positive", "Test", "Training", "Validation", "Negative"]:
         print(f"Running Enformer for {tag}")
         print(10 *"=")
         GeneratedEnformer(tag=tag).extract()
+    """
     # GeneratedEnformer(tag="Generated", demo=True).extract()
     # EnformerBase(region="Random_Genome_Regions").capture_normalization_values(
     #     tag="Promoters", track_name="CAGE", amount=100
     # )
-    """NormalizeTracks(
-        input_sequence="GCAACTTACAACCACAGAATTCAGTTCTCAAAATAGGACACAGAGAAAGTGAGACTGAGAAGTGTGGAAATTCCCCCAGCCTGTCGGACTGGACTAATGTTTCATTCGTAATTAGGTACAAAAAAGCCATCAGTACAGTGGAAAGCAGGGAGTTCAGATGTGACATATAATTCTTTTTCCCTATTCACTTTCTCTTCCCT",
-        enhancer_region=["chr22", 47631653, 47631654],
-        gene_region=["chr22", 47631653, 47631654],
+    NormalizeTracks(
+        input_sequence="TGAGCCAAAGTGTGCTTACCTGAGATAACCTCACCACCATGGCCTTGCTTGAGGAAGCTGAAGACGGTTTTCTGGTGATAAGCACAGTCGATACAGGCCTGGACAGCCTGCTGCAACACCACAGAGGCACGGGCTGGTCCAAAATGGTCAGGGAGTTGCTGGACCTTCTTCTTATCTAAGTGGGGGCCTGTGCTGCCATT",
+        # enhancer_region=["chr6", 27131750, 27133750],
+        # gene_region=["chr6", 27131750, 27133750],
     ).extract()
-    """
+
+    # k562_sequence = TGAGCCAAAGTGTGCTTACCTGAGATAACCTCACCACCATGGCCTTGCTTGAGGAAGCTGAAGACGGTTTTCTGGTGATAAGCACAGTCGATACAGGCCTGGACAGCCTGCTGCAACACCACAGAGGCACGGGCTGGTCCAAAATGGTCAGGGAGTTGCTGGACCTTCTTCTTATCTAAGTGGGGGCCTGTGCTGCCATT
+
+    # strong_gm = GCAACTTACAACCACAGAATTCAGTTCTCAAAATAGGACACAGAGAAAGTGAGACTGAGAAGTGTGGAAATTCCCCCAGCCTGTCGGACTGGACTAATGTTTCATTCGTAATTAGGTACAAAAAAGCCATCAGTACAGTGGAAAGCAGGGAGTTCAGATGTGACATATAATTCTTTTTCCCTATTCACTTTCTCTTCCCT
