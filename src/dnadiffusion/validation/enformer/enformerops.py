@@ -1,7 +1,6 @@
 from dataclasses import dataclass, field
 from typing import Dict, List
 
-import igv_notebook
 import kipoiseq
 import numpy as np
 import pandas as pd
@@ -76,14 +75,11 @@ class EnformerOps(EnformerData):
         self,
         model: Enformer,
         sequence_number_thousand: int,
-        gene_region: List[str | int] | None = None,
         step: int = -1,
         interval_list: str | List[str] | None = None,
-        show_track: bool = False,
         wildtype: bool = False,
         modify_prefix: str = "",
         sequence_length: int = 393216,
-        view_region_offset: int = 10000,
     ):
         """
         Generates IGV tracks for a given sequence in a diffusion dataset.
@@ -133,27 +129,14 @@ class EnformerOps(EnformerData):
 
         predictions = self.predict_from_sequence(model, seq_input)
         mod_start = int(start_test + ((end_test - start_test) / 2) - int(114688 / 2))
-        mod_end = int(start_test + ((end_test - start_test) / 2) + int(114688 / 2))
-
-        self.full_generated_range_start = mod_start
-        self.full_generated_range_end = mod_end
-        self.full_generated_chr = chr_test
 
         for track in self.tracks:
             if track["type"] == "enformer":
                 id = track["id"]
                 n = modify_prefix + track["name"]
-                lg = track["log"]
-                color = track["color"]
-                autoscaleGroup = track["autoscaleGroup"]
-
                 p_values = predictions[:, id]
-                if lg == True:
-                    p_values = np.log10(1 + predictions[:, id])
                 bigwig_names.append(n + ".bigwig")
-                out_track = self._enformer_bigwig_creation(chr_test, mod_start, p_values, n, color, autoscaleGroup)
-                if show_track:
-                    b.load_track(out_track)
+                self._enformer_bigwig_creation(chr_test, mod_start, p_values, n)
 
         self.bigwig_names = bigwig_names
 
@@ -165,27 +148,15 @@ class EnformerOps(EnformerData):
         bigwig_names = []
         mod_start = int(enhancer_region[1] + ((enhancer_region[2] - enhancer_region[1]) / 2)) - int(114688 / 2)
         for track in self.tracks:
+            print(track["name"])
             current_values = all_values[track["name"] + ".bigwig"].values
             curr_name = "normalized_" + track["name"]
-            print(curr_name)
-            curr_color = track["color"]
-            curr_autoscaleGroup = track["autoscaleGroup"]
 
-            out_track = self.normalized_bigwig(
-                enhancer_region[0], mod_start, current_values, curr_name, curr_color, curr_autoscaleGroup
-            )
+            self.normalized_bigwig(enhancer_region[0], mod_start, current_values, curr_name)
 
-            # Generate corresponding wig file
-            # subprocess.run(
-            #     f"./src/dnadiffusion/validation/bigWigToBedGraph {curr_name}.bigwig {curr_name}.bedgraph",
-            #     check=True,
-            #     shell=True,
-            # )
             bigwig_names.append(curr_name + ".bigwig")
 
         return bigwig_names
-
-        # Save plots
 
     def extract_from_position(self, position, as_dataframe=False):
         """
@@ -240,7 +211,7 @@ class EnformerOps(EnformerData):
 
         return "".join(seq_to_mod_array)
 
-    def _enformer_bigwig_creation(self, chr_name, start, values, track_name, color, autoscaleGroup):
+    def _enformer_bigwig_creation(self, chr_name, start, values, track_name):
         """
         Creates a bigwig file for an Enformer track.
 
@@ -264,17 +235,7 @@ class EnformerOps(EnformerData):
             chr_name, [start + (128 * x) for x in range(values_conversion.shape[0])], values=values_conversion, span=128
         )
 
-        return {
-            "name": f"{track_name}",
-            "path": f"{track_name}.bigwig",
-            "format": "bigwig",
-            "displayMode": "EXPANDED",
-            "color": f"{color}",
-            "height": 100,
-            "autoscaleGroup": f"{autoscaleGroup}",
-        }
-
-    def normalized_bigwig(self, chr_name, start, values, track_name, color, autoscaleGroup):
+    def normalized_bigwig(self, chr_name, start, values, track_name):
         """
         Creates a bigwig file for an Enformer track.
 
@@ -297,13 +258,3 @@ class EnformerOps(EnformerData):
         bw.addEntries(
             chr_name, [start + x for x in range(values_conversion.shape[0])], values=values_conversion, span=1
         )
-
-        return {
-            "name": f"{track_name}",
-            "path": f"{track_name}.bigwig",
-            "format": "bigwig",
-            "displayMode": "EXPANDED",
-            "color": f"{color}",
-            "height": 100,
-            "autoscaleGroup": f"{autoscaleGroup}",
-        }

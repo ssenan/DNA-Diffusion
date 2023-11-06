@@ -9,7 +9,7 @@ from tqdm import tqdm
 from dnadiffusion import DATA_DIR
 from dnadiffusion.utils.data_util import seq_extract
 from dnadiffusion.validation.enformer.enformer import Enformer
-from dnadiffusion.validation.enformer.enformer_utils import extract_value_json, normalize_tracks
+from dnadiffusion.validation.enformer.enformer_utils import extract_value_ini, normalize_tracks
 from dnadiffusion.validation.enformer.enformerops import EnformerOps
 from dnadiffusion.validation.validation_utils import extract_enhancer_sequence
 
@@ -152,7 +152,7 @@ class EnformerBase:
         df_out.to_csv(f"{DATA_DIR}/{track_name}_normalization_values.txt", sep="\t", index=False)
 
 
-class LocusVisualization(EnformerBase):
+class LocusVisualizationGenerated(EnformerBase):
     def __init__(
         self,
         data_path: str = f"{DATA_DIR}/validation_dataset.txt",
@@ -200,8 +200,6 @@ class LocusVisualization(EnformerBase):
             -1,
             interval_list=self.enhancer_region,
             wildtype=False,
-            gene_region=self.gene_region,
-            show_track=self.show_track,
             modify_prefix=self.modify_prefix,
         )
 
@@ -242,8 +240,6 @@ class GeneratedEnformer(EnformerBase):
                 -1,
                 interval_list=self.enhancer_region,
                 wildtype=False,
-                gene_region=self.gene_region,
-                show_track=self.show_track,
                 modify_prefix=self.modify_prefix,
             )
 
@@ -276,12 +272,12 @@ class GeneratedEnformer(EnformerBase):
                 file_modify += 1
 
         # Find all the files written to DATA_DIR from the above loop
-        files = sorted([f"{DATA_DIR}/{f}" for f in os.listdir(DATA_DIR) if f.endswith("_test_seqs.TXT")])
+        files = sorted([f"{DATA_DIR}/{f}" for f in os.listdir(DATA_DIR) if f.endswith("_test_seqs.txt")])
 
         df_out = pd.concat([pd.read_csv(f, sep="\t") for f in files], axis=0)
 
         # Save output
-        print(f"Saving output to {DATA_DIR}/{self.tag}_test_seqs_final.TXT")
+        print(f"Saving output to {DATA_DIR}/{self.tag}_test_seqs_final.txt")
         df_out.to_csv(f"{DATA_DIR}/{self.tag}_test_seqs_final.TXT", sep="\t", index=False)
 
         # Remove all the files written to DATA_DIR from the above loop
@@ -307,6 +303,7 @@ class NormalizeTracks(EnformerBase):
         input_sequence: str,
         enhancer_region: List[str | int] = ["chrX", 48782929, 48783129],
         gene_region: List[str | int] = ["chrX", 48785536, 48787536],
+        pygtrack_region: str = "chrX:48725536-48847536",
         normalized_dnase_path: str = f"{DATA_DIR}/DNASE_normalization_values.txt",
         normalized_cage_path: str = f"{DATA_DIR}/CAGE_normalization_values.txt",
         normalized_h3k4me3_path: str = f"{DATA_DIR}/H3K4ME3_normalization_values.txt",
@@ -316,6 +313,7 @@ class NormalizeTracks(EnformerBase):
         self.input_sequence = input_sequence
         self.enhancer_region = enhancer_region
         self.gene_region = gene_region
+        self.pygtrack_region = pygtrack_region
         self.normalized_dnase_rgr = pd.read_csv(normalized_dnase_path, sep="\t")
         self.normalized_cage_promoters = pd.read_csv(normalized_cage_path, sep="\t")
         self.normalized_h3k4me3_promoters = pd.read_csv(normalized_h3k4me3_path, sep="\t")
@@ -325,7 +323,7 @@ class NormalizeTracks(EnformerBase):
         # Processing sequence of interest
         self.eops.load_data([self.input_sequence])
         # Creating tracks
-        self.eops.generate_tracks(self.model, -1, interval_list=self.enhancer_region, wildtype=False, show_track=False)
+        self.eops.generate_tracks(self.model, -1, interval_list=self.enhancer_region, wildtype=False)
         # Extracting values from tracks
         mod_start = int(self.enhancer_region[1] + ((self.enhancer_region[2] - self.enhancer_region[1]) / 2)) - int(
             114688 / 2
@@ -348,34 +346,28 @@ class NormalizeTracks(EnformerBase):
 
         # Concatenating normalized values
         normalized_values = pd.concat([normalized_dnase, normalized_cage, normalized_h3k4me3], axis=1)
-        # Turning self.enhancer_region list into a bed file and saving
-        with open(f"{DATA_DIR}/view_region.bed", "w") as f:
+        # Turning self.enhancer_region list into a bed file and the end of the enhancer region to a new line in the bed file
+        with open(f"{DATA_DIR}/enhancer_region.bed", "w") as f:
             f.write(
-                f"{self.gene_region[0]}\t{self.gene_region[1]-self.view_offset}\t{self.gene_region[2]+self.view_offset}\n"
+                f"{self.enhancer_region[0]}\t{self.enhancer_region[1]}\t{self.enhancer_region[2]}\n{self.enhancer_region[0]}\t{self.enhancer_region[2]}\t{self.enhancer_region[2]+1}\n"
             )
+            f.close()
 
-        bigwig_files = self.eops.igv_reports_tracks(
+        bigwig_files = self.eops.generate_normalized_tracks(
             normalized_values,
             self.enhancer_region,
         )
         # Extracting max_values from tracks to write to json config
-        json_config = extract_value_json(
-            f"{DATA_DIR}/track_config.json",
+        ini_config = extract_value_ini(
+            f"{DATA_DIR}/tracks.ini",
             bigwig_files,
-            self.enhancer_region,
+            self.gene_region,
+        )
+        os.system(
+            f"pyGenomeTracks --tracks {DATA_DIR}/tracks.ini --region {self.pygtrack_region} --outFileName PYG_tracks_Hepg2.pdf"
         )
 
-        # Running igv_reports
-        # os.system(
-        #     f"create_report {DATA_DIR}/view_region.bed \
-        #     --fasta {DATA_DIR}/hg38.fa\
-        #     --flanking 50000 \
-        #     --roi {DATA_DIR}/roi.json \
-        #     --track-config {DATA_DIR}/{json_config} \
-        #     --output {DATA_DIR}/igv_report.html \
-        #     "
-        # )
-        print("Generated igv report")
+        print("Generated tracks visualization")
 
 
 if __name__ == "__main__":
@@ -391,11 +383,14 @@ if __name__ == "__main__":
     #     tag="Promoters", track_name="CAGE", amount=100
     # )
     NormalizeTracks(
-        input_sequence="TGAGCCAAAGTGTGCTTACCTGAGATAACCTCACCACCATGGCCTTGCTTGAGGAAGCTGAAGACGGTTTTCTGGTGATAAGCACAGTCGATACAGGCCTGGACAGCCTGCTGCAACACCACAGAGGCACGGGCTGGTCCAAAATGGTCAGGGAGTTGCTGGACCTTCTTCTTATCTAAGTGGGGGCCTGTGCTGCCATT",
-        # enhancer_region=["chr6", 27131750, 27133750],
-        # gene_region=["chr6", 27131750, 27133750],
+        input_sequence="AAAAAAAGTGAGTGTGGCCTGCCACCTTGAAAGAGGTCACTGATTCGCTGTTACTAGGGCATTTGCTTTTTTGGACGAACACACCATCCTTTGATCAGTGGCATAGACTTGGATGACAGTTGGCCAAAGTAATGAGTGCAGTTTACTTAGGGACAAAGCAAAGGTGGTTGACCTGTATGGTATTTGAACTTACTGGCTTT",
+        enhancer_region=["chr19", 15935185, 15935419],
+        gene_region=["chr19", 15912377, 15934529],
+        pygtrack_region="chr19:15907377-15939529",
     ).extract()
 
     # k562_sequence = TGAGCCAAAGTGTGCTTACCTGAGATAACCTCACCACCATGGCCTTGCTTGAGGAAGCTGAAGACGGTTTTCTGGTGATAAGCACAGTCGATACAGGCCTGGACAGCCTGCTGCAACACCACAGAGGCACGGGCTGGTCCAAAATGGTCAGGGAGTTGCTGGACCTTCTTCTTATCTAAGTGGGGGCCTGTGCTGCCATT
 
     # strong_gm = GCAACTTACAACCACAGAATTCAGTTCTCAAAATAGGACACAGAGAAAGTGAGACTGAGAAGTGTGGAAATTCCCCCAGCCTGTCGGACTGGACTAATGTTTCATTCGTAATTAGGTACAAAAAAGCCATCAGTACAGTGGAAAGCAGGGAGTTCAGATGTGACATATAATTCTTTTTCCCTATTCACTTTCTCTTCCCT
+
+    # hepg2 = AAAAAAAGTGAGTGTGGCCTGCCACCTTGAAAGAGGTCACTGATTCGCTGTTACTAGGGCATTTGCTTTTTTGGACGAACACACCATCCTTTGATCAGTGGCATAGACTTGGATGACAGTTGGCCAAAGTAATGAGTGCAGTTTACTTAGGGACAAAGCAAAGGTGGTTGACCTGTATGGTATTTGAACTTACTGGCTTT

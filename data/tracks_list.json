@@ -2,82 +2,55 @@
     {
         "name": "DNASE_GM12878_enformer",
         "file": null,
-        "color": "BLUE",
         "type": "enformer",
-        "id": 12,
-        "log": false,
-        "autoscaleGroup": 1
+        "id": 12
     },
     {
         "name": "DNASE_K562_enformer",
         "file": null,
-        "color": "RED",
         "type": "enformer",
-        "id": 121,
-        "log": false,
-        "autoscaleGroup": 1
+        "id": 121
     },
     {
         "name": "DNASE_HepG2_enformer",
         "file": null,
-        "color": "BLACK",
         "type": "enformer",
-        "id": 27,
-        "log": false,
-        "autoscaleGroup": 1
+        "id": 27
     },
     {
         "name": "CAGE_GM12878_enformer",
         "file": null,
-        "color": "BLUE",
         "type": "enformer",
-        "id": 5110,
-        "log": false,
-        "autoscaleGroup": 2
+        "id": 5110
     },
     {
         "name": "CAGE_K562_enformer",
         "file": null,
-        "color": "RED",
         "type": "enformer",
-        "id": 5111,
-        "log": false,
-        "autoscaleGroup": 2
+        "id": 5111
     },
     {
         "name": "CAGE_HepG2_enformer",
         "file": null,
-        "color": "BLACK",
         "type": "enformer",
-        "id": 5109,
-        "log": false,
-        "autoscaleGroup": 2
+        "id": 5109
     },
     {
         "name": "H3K4ME3_GM12878_enformer",
         "file": null,
-        "color": "BLUE",
         "type": "enformer",
-        "id": 686,
-        "log": false,
-        "autoscaleGroup": 3
+        "id": 686
     },
     {
         "name": "H3K4ME3_K562_enformer",
         "file": null,
-        "color": "RED",
         "type": "enformer",
-        "id": 701,
-        "log": false,
-        "autoscaleGroup": 3
+        "id": 701
     },
     {
         "name": "H3K4ME3_HepG2_enformer",
         "file": null,
-        "color": "BLACK",
         "type": "enformer",
-        "id": 717,
-        "log": false,
-        "autoscaleGroup": 3
+        "id": 717
     }
 ]
