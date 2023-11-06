@@ -22,6 +22,11 @@ wandb/*
 *.fasta
 *.bed
 
+# enformer files
+*.bw
+*.bigwig
+*.bedgraph
+
 # Checkpoints
 *.pt
 

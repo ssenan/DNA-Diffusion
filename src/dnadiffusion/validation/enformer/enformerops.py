@@ -1,4 +1,3 @@
-import subprocess
 from dataclasses import dataclass, field
 from typing import Dict, List
 
@@ -140,32 +139,6 @@ class EnformerOps(EnformerData):
         self.full_generated_range_end = mod_end
         self.full_generated_chr = chr_test
 
-        if show_track:
-            igv_notebook.init()
-            b = igv_notebook.Browser(
-                {
-                    "genome": "hg38",
-                    "locus": f"{gene_region[0]}:{gene_region[1]-view_region_offset}-{gene_region[1]+view_region_offset}",
-                    "roi": [
-                        # Gene Region
-                        {
-                            "name": "Gene",
-                            "color": "rgba(3,52,249,0.25)",
-                            "features": [
-                                {"chr": gene_region[0], "start": gene_region[1], "end": gene_region[2]},
-                            ],
-                        },
-                        {
-                            "name": "Enhancer",
-                            "color": "rgba(255, 0, 0, 0.25)",
-                            "features": [
-                                {"chr": interval_list[0], "start": interval_list[1], "end": interval_list[2]},
-                            ],
-                        },
-                    ],
-                }
-            )
-
         for track in self.tracks:
             if track["type"] == "enformer":
                 id = track["id"]
@@ -182,45 +155,9 @@ class EnformerOps(EnformerData):
                 if show_track:
                     b.load_track(out_track)
 
-            elif track["type"] == "real":
-                n = track["name"]
-                f = modify_prefix + track["file"]
-                c = track["color"]
-                bigwig_names.append(f)
-                if show_track:
-                    b.load_track(self._generate_real_tracks(n, f, c))
-
         self.bigwig_names = bigwig_names
 
     def generate_normalized_tracks(
-        self,
-        all_values: np.array,
-        gene_region: List[str | int],
-        enhancer_region: List[str | int],
-        view_region_offset: int = 10000,
-        show_track: bool = False,
-    ):
-        bigwig_names = []
-        for track in self.tracks:
-            current_values = all_values[track["name"] + ".bigwig"].values
-            curr_name = "normalized_" + track["name"]
-            curr_color = track["color"]
-            curr_autoscaleGroup = track["autoscaleGroup"]
-
-            out_track = self.normalized_bigwig(
-                gene_region[0], gene_region[1], current_values, curr_name, curr_color, curr_autoscaleGroup
-            )
-            bigwig_names.append(curr_name + ".bigwig")
-            if show_track:
-                b.load_track(out_track)
-
-        self.bigwig_names = bigwig_names
-
-        # Save plots
-        if show_track:
-            b.to_svg()
-
-    def igv_reports_tracks(
         self,
         all_values: np.array,
         enhancer_region: List[str | int],
@@ -369,47 +306,4 @@ class EnformerOps(EnformerData):
             "color": f"{color}",
             "height": 100,
             "autoscaleGroup": f"{autoscaleGroup}",
-        }
-
-    def _generate_real_tracks(self, name, filename, color):
-        """
-        Generates a real track for a given bigwig file.
-
-        Args:
-            name (str): The name of the track.
-            file (str): The name of the bigwig file to use for the track.
-            color (str): The color to use for the track.
-
-
-        Returns:
-            dict: A dictionary containing the name, path, format, display mode, and color of the track.
-        """
-
-        chr_name, start, end = self.full_generated_chr, self.full_generated_range_start, self.full_generated_range_end
-        t_name = f"{name}_minimal.bw"
-        bw = pyBigWig.open(t_name, "w")
-        bw.addHeader([(chr_name, coord) for chr_name, coord in self.df_sizes.values])
-        bw_cut = pyBigWig.open(filename, "r")
-        values = np.array(bw_cut.values(chr_name, start, end))
-
-        values_conversion = (values * 1000).astype(np.int64) + 0.0
-        print(values_conversion)
-        print(chr_name, start)
-        bw.addEntries(
-            chr_name,
-            [r for r in range(start, start + len(values_conversion))],
-            values=list(values_conversion),
-            span=1,
-            step=1,
-        )
-        bw.close()
-        bw_cut.close()
-
-        return {
-            "name": name,
-            "path": t_name,
-            "format": "bigwig",
-            "displayMode": "EXPANDED",
-            "color": color,
-            "height": 100,
         }
