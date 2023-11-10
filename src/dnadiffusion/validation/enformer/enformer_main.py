@@ -66,7 +66,6 @@ class EnformerBase:
                 0,
                 interval_list=s_in,
                 wildtype=True,
-                show_track=self.show_track,
                 modify_prefix=self.modify_prefix,
             )
             out_in = self.eops.extract_from_position(s_in, as_dataframe=True)
@@ -130,7 +129,6 @@ class EnformerBase:
                 -1,
                 interval_list=sequence_region,
                 wildtype=True,
-                show_track=self.show_track,
                 modify_prefix=self.modify_prefix,
             )
 
@@ -152,35 +150,44 @@ class EnformerBase:
         df_out.to_csv(f"{DATA_DIR}/{track_name}_normalization_values.txt", sep="\t", index=False)
 
 
-class LocusVisualizationGenerated(EnformerBase):
+class LocusVisualization(EnformerBase):
     def __init__(
         self,
         data_path: str = f"{DATA_DIR}/validation_dataset.txt",
         tag: str = "GM12878_positive",
         index: int = 0,
-        id: str = "81695_GENERATED_K562",
+        seq_id: str = "81695_GENERATED_K562",
         genome_path: str = f"{DATA_DIR}/hg38.fa",
         enhancer_region: List[str | int] = ["chrX", 48782929, 48783129],
         gene_region: List[str | int] = ["chrX", 48785536, 48787536],
+        pygtrack_region: str = "chrX:48775536-48797536",
+        # pygtrack_region: str = "chrX:48782429-48783629",
+        normalized_dnase_path: str = f"{DATA_DIR}/DNASE_normalization_values.txt",
+        normalized_cage_path: str = f"{DATA_DIR}/CAGE_normalization_values.txt",
+        normalized_h3k4me3_path: str = f"{DATA_DIR}/H3K4ME3_normalization_values.txt",
         show_track: bool = False,
         wildtype_shuffle: bool = False,
-        input_sequence: str | None = None,
+        input_sequence: bool = False,
+        custom_max_dict: dict | None = None,
     ):
         super().__init__()
         self.data_path = data_path
         self.tag = tag
         self.index = index
-        self.id = id
+        self.id = seq_id
         self.genome_path = genome_path
         self.enhancer_region = enhancer_region
         self.gene_region = gene_region
+        self.pygtrack_region = pygtrack_region
+        self.normalized_dnase_rgr = pd.read_csv(normalized_dnase_path, sep="\t")
+        self.normalized_cage_promoters = pd.read_csv(normalized_cage_path, sep="\t")
+        self.normalized_h3k4me3_promoters = pd.read_csv(normalized_h3k4me3_path, sep="\t")
         self.show_track = show_track
         self.wildtype_shuffle = wildtype_shuffle
         self.input_sequence = input_sequence
+        self.custom_max_dict = custom_max_dict
 
     def extract(self):
-        captured_values = []
-        captured_values_target = []
         if self.input_sequence:
             sequences = seq_extract(self.data_path, f"{self.tag}")
             id_seq = sequences[sequences.ID == f"{self.id}"]["SEQUENCE"].values[0]
@@ -200,8 +207,52 @@ class LocusVisualizationGenerated(EnformerBase):
             -1,
             interval_list=self.enhancer_region,
             wildtype=False,
-            modify_prefix=self.modify_prefix,
         )
+        # Extracting values from tracks
+        mod_start = int(self.enhancer_region[1] + ((self.enhancer_region[2] - self.enhancer_region[1]) / 2)) - int(
+            114688 / 2
+        )
+        mod_end = int(self.enhancer_region[1] + ((self.enhancer_region[2] - self.enhancer_region[1]) / 2)) + int(
+            114688 / 2
+        )
+        mod_sequence_region = [self.enhancer_region[0], mod_start, mod_end]
+        extracted_values = self.eops.extract_from_position(mod_sequence_region, as_dataframe=True)
+
+        # Normalizing DNASE values
+        extracted_values_dnase = extracted_values[[x for x in extracted_values.columns if "DNASE" in x]]
+        normalized_dnase = normalize_tracks(extracted_values_dnase, self.normalized_dnase_rgr)
+        # Normalizing CAGE values
+        extracted_values_cage = extracted_values[[x for x in extracted_values.columns if "CAGE" in x]]
+        normalized_cage = normalize_tracks(extracted_values_cage, self.normalized_cage_promoters)
+        # Normalizing H3K4ME3 values
+        extracted_values_h3k4me3 = extracted_values[[x for x in extracted_values.columns if "H3K4ME3" in x]]
+        normalized_h3k4me3 = normalize_tracks(extracted_values_h3k4me3, self.normalized_h3k4me3_promoters)
+
+        # Concatenating normalized values
+        normalized_values = pd.concat([normalized_dnase, normalized_cage, normalized_h3k4me3], axis=1)
+        # Turning self.enhancer_region list into a bed file and the end of the enhancer region to a new line in the bed file
+        with open(f"{DATA_DIR}/enhancer_region.bed", "w") as f:
+            f.write(
+                f"{self.enhancer_region[0]}\t{self.enhancer_region[1]}\t{self.enhancer_region[2]}\n{self.enhancer_region[0]}\t{self.enhancer_region[2]}\t{self.enhancer_region[2]+1}\n"
+            )
+            f.close()
+
+        bigwig_files = self.eops.generate_normalized_tracks(
+            normalized_values,
+            self.enhancer_region,
+        )
+        # Extracting max_values from tracks to write to json config
+        ini_config = extract_value_ini(
+            f"{DATA_DIR}/tracks.ini",
+            bigwig_files,
+            self.gene_region,
+            custom_max_dict=self.custom_max_dict,
+        )
+        os.system(
+            f"pyGenomeTracks --tracks {DATA_DIR}/tracks.ini --region {self.pygtrack_region} --dpi 200 --outFileName {self.id}.png"
+        )
+
+        print("Generated tracks visualization")
 
 
 class GeneratedEnformer(EnformerBase):
@@ -303,7 +354,7 @@ class NormalizeTracks(EnformerBase):
         input_sequence: str,
         enhancer_region: List[str | int] = ["chrX", 48782929, 48783129],
         gene_region: List[str | int] = ["chrX", 48785536, 48787536],
-        pygtrack_region: str = "chrX:48725536-48847536",
+        pygtrack_region: str = "chrX:48780536-48792536",
         normalized_dnase_path: str = f"{DATA_DIR}/DNASE_normalization_values.txt",
         normalized_cage_path: str = f"{DATA_DIR}/CAGE_normalization_values.txt",
         normalized_h3k4me3_path: str = f"{DATA_DIR}/H3K4ME3_normalization_values.txt",
@@ -382,15 +433,57 @@ if __name__ == "__main__":
     # EnformerBase(region="Random_Genome_Regions").capture_normalization_values(
     #     tag="Promoters", track_name="CAGE", amount=100
     # )
-    NormalizeTracks(
+    """NormalizeTracks(
         input_sequence="AAAAAAAGTGAGTGTGGCCTGCCACCTTGAAAGAGGTCACTGATTCGCTGTTACTAGGGCATTTGCTTTTTTGGACGAACACACCATCCTTTGATCAGTGGCATAGACTTGGATGACAGTTGGCCAAAGTAATGAGTGCAGTTTACTTAGGGACAAAGCAAAGGTGGTTGACCTGTATGGTATTTGAACTTACTGGCTTT",
-        enhancer_region=["chr19", 15935185, 15935419],
-        gene_region=["chr19", 15912377, 15934529],
-        pygtrack_region="chr19:15907377-15939529",
+        # HepG2
+        enhancer_region=["chr20", 44370692, 44370892],
+        gene_region=["chr20", 44355699, 44432845],
+        pygtrack_region="chr20:44350699-44437845",
+        # GM12878
+        # enhancer_region=["chr16", 28924139, 28924339],
+        # gene_region=["chr16", 28931971, 28939342],
+        # pygtrack_region="chr16:28921971-28949342",
     ).extract()
+    """
 
     # k562_sequence = TGAGCCAAAGTGTGCTTACCTGAGATAACCTCACCACCATGGCCTTGCTTGAGGAAGCTGAAGACGGTTTTCTGGTGATAAGCACAGTCGATACAGGCCTGGACAGCCTGCTGCAACACCACAGAGGCACGGGCTGGTCCAAAATGGTCAGGGAGTTGCTGGACCTTCTTCTTATCTAAGTGGGGGCCTGTGCTGCCATT
 
     # strong_gm = GCAACTTACAACCACAGAATTCAGTTCTCAAAATAGGACACAGAGAAAGTGAGACTGAGAAGTGTGGAAATTCCCCCAGCCTGTCGGACTGGACTAATGTTTCATTCGTAATTAGGTACAAAAAAGCCATCAGTACAGTGGAAAGCAGGGAGTTCAGATGTGACATATAATTCTTTTTCCCTATTCACTTTCTCTTCCCT
 
     # hepg2 = AAAAAAAGTGAGTGTGGCCTGCCACCTTGAAAGAGGTCACTGATTCGCTGTTACTAGGGCATTTGCTTTTTTGGACGAACACACCATCCTTTGATCAGTGGCATAGACTTGGATGACAGTTGGCCAAAGTAATGAGTGCAGTTTACTTAGGGACAAAGCAAAGGTGGTTGACCTGTATGGTATTTGAACTTACTGGCTTT
+
+    LocusVisualization(
+        tag="Generated",
+        seq_id="27724_GENERATED_GM12878",
+        input_sequence=True,
+        custom_max_dict={
+            "normalized_DNASE_GM12878_enformer": 1000,
+            "normalized_DNASE_HepG2_enformer": 1000,
+            "normalized_DNASE_K562_enformer": 1000,
+            "normalized_CAGE_GM12878_enformer": 350000,
+            "normalized_CAGE_HepG2_enformer": 350000,
+            "normalized_CAGE_K562_enformer": 350000,
+            "normalized_H3K4ME3_GM12878_enformer": 60000,
+            "normalized_H3K4ME3_HepG2_enformer": 60000,
+            "normalized_H3K4ME3_K562_enformer": 60000,
+        },
+    ).extract()
+    # roi_list = [
+    # ]
+    # for sequence_id in roi_list:
+    #     LocusVisualization(
+    #         tag="Generated",
+    #         seq_id=sequence_id,
+    #         input_sequence=True,
+    #         custom_max_dict={
+    #             "normalized_DNASE_GM12878_enformer": 1000,
+    #             "normalized_DNASE_HepG2_enformer": 1000,
+    #             "normalized_DNASE_K562_enformer": 1000,
+    #             "normalized_CAGE_GM12878_enformer": 350000,
+    #             "normalized_CAGE_HepG2_enformer": 350000,
+    #             "normalized_CAGE_K562_enformer": 350000,
+    #             "normalized_H3K4ME3_GM12878_enformer": 60000,
+    #             "normalized_H3K4ME3_HepG2_enformer": 60000,
+    #             "normalized_H3K4ME3_K562_enformer": 60000,
+    #         },
+    #     ).extract()

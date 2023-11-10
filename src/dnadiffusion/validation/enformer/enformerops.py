@@ -80,6 +80,7 @@ class EnformerOps(EnformerData):
         wildtype: bool = False,
         modify_prefix: str = "",
         sequence_length: int = 393216,
+        replace_region: bool = False,
     ):
         """
         Generates IGV tracks for a given sequence in a diffusion dataset.
@@ -132,9 +133,9 @@ class EnformerOps(EnformerData):
 
         for track in self.tracks:
             if track["type"] == "enformer":
-                id = track["id"]
+                prediction_id = track["id"]
                 n = modify_prefix + track["name"]
-                p_values = predictions[:, id]
+                p_values = predictions[:, prediction_id]
                 bigwig_names.append(n + ".bigwig")
                 self._enformer_bigwig_creation(chr_test, mod_start, p_values, n)
 

@@ -133,30 +133,33 @@ def extract_value_ini(
     big_wig_files: list,
     enhancer_region: list,
     enhancer_region_offset: int = 1000,
+    custom_max_dict: dict | None = None,
 ):
     # Collect file names 3 at a time
     max_dict = {}
-    for i in range(0, len(sorted(big_wig_files)), 3):
-        curr_files = big_wig_files[i : i + 3]
-        # For each group of 3 files, collect the max value for each file
-        curr_max = []
-        for file in curr_files:
-            bw = pyBigWig.open(file)
-            curr_max.append(
-                bw.stats(
-                    enhancer_region[0],
-                    enhancer_region[1] - enhancer_region_offset,
-                    enhancer_region[2] + enhancer_region_offset,
-                    type="max",
-                )[0]
-            )
-            bw.close()
-        # add the max values to the dictionary for each individual file
-        for file in curr_files:
-            # Remove extension
-            file_rename = file.replace(".bigwig", "")
-            max_dict[file_rename] = max(curr_max) * 1.5
+    if not custom_max_dict:
+        for i in range(0, len(sorted(big_wig_files)), 3):
+            curr_files = big_wig_files[i : i + 3]
+            # For each group of 3 files, collect the max value for each file
+            curr_max = []
+            for file in curr_files:
+                bw = pyBigWig.open(file)
+                curr_max.append(
+                    bw.stats(
+                        enhancer_region[0],
+                        enhancer_region[1] - enhancer_region_offset,
+                        enhancer_region[2] + enhancer_region_offset,
+                        type="max",
+                    )[0]
+                )
+                bw.close()
+            # add the max values to the dictionary for each individual file
+            for file in curr_files:
+                # Remove extension
+                file_rename = file.replace(".bigwig", "")
+                max_dict[file_rename] = max(curr_max) * 1.5
 
+    max_dict = max_dict if custom_max_dict is None else custom_max_dict
     # Read in the ini file
     config = configparser.ConfigParser()
     config.read(ini_path)
