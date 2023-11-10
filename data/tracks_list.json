@@ -3,54 +3,63 @@
         "name": "DNASE_GM12878_enformer",
         "file": null,
         "type": "enformer",
-        "id": 12
+        "id": 12,
+        "autoscaleGroup": 1
     },
     {
         "name": "DNASE_K562_enformer",
         "file": null,
         "type": "enformer",
-        "id": 121
+        "id": 121,
+        "autoscaleGroup": 1
     },
     {
         "name": "DNASE_HepG2_enformer",
         "file": null,
         "type": "enformer",
-        "id": 27
+        "id": 27,
+        "autoscaleGroup": 1
     },
     {
         "name": "CAGE_GM12878_enformer",
         "file": null,
         "type": "enformer",
-        "id": 5110
+        "id": 5110,
+        "autoscaleGroup": 2
     },
     {
         "name": "CAGE_K562_enformer",
         "file": null,
         "type": "enformer",
-        "id": 5111
+        "id": 5111,
+        "autoscaleGroup": 2
     },
     {
         "name": "CAGE_HepG2_enformer",
         "file": null,
         "type": "enformer",
-        "id": 5109
+        "id": 5109,
+        "autoscaleGroup": 2
     },
     {
         "name": "H3K4ME3_GM12878_enformer",
         "file": null,
         "type": "enformer",
-        "id": 686
+        "id": 686,
+        "autoscaleGroup": 3
     },
     {
         "name": "H3K4ME3_K562_enformer",
         "file": null,
         "type": "enformer",
-        "id": 701
+        "id": 701,
+        "autoscaleGroup": 3
     },
     {
         "name": "H3K4ME3_HepG2_enformer",
         "file": null,
         "type": "enformer",
-        "id": 717
+        "id": 717,
+        "autoscaleGroup": 3
     }
 ]
