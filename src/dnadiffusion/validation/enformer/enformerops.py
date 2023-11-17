@@ -136,7 +136,7 @@ class EnformerOps(EnformerData):
                 prediction_id = track["id"]
                 n = modify_prefix + track["name"]
                 p_values = predictions[:, prediction_id]
-                bigwig_names.append(n + ".bigwig")
+                bigwig_names.append(n + ".bw")
                 self._enformer_bigwig_creation(chr_test, mod_start, p_values, n)
 
         self.bigwig_names = bigwig_names
@@ -150,12 +150,12 @@ class EnformerOps(EnformerData):
         mod_start = int(enhancer_region[1] + ((enhancer_region[2] - enhancer_region[1]) / 2)) - int(114688 / 2)
         for track in self.tracks:
             print(track["name"])
-            current_values = all_values[track["name"] + ".bigwig"].values
+            current_values = all_values[track["name"] + ".bw"].values
             curr_name = "normalized_" + track["name"]
 
             self.normalized_bigwig(enhancer_region[0], mod_start, current_values, curr_name)
 
-            bigwig_names.append(curr_name + ".bigwig")
+            bigwig_names.append(curr_name + ".bw")
 
         return bigwig_names
 
@@ -228,7 +228,7 @@ class EnformerOps(EnformerData):
             as well as its format, display mode, and color.
         """
 
-        t_name = f"{track_name}.bigwig"
+        t_name = f"{track_name}.bw"
         bw = pyBigWig.open(t_name, "w")
         bw.addHeader([(chr_name, coord) for chr_name, coord in self.df_sizes.values])
         values_conversion = (values * 1000).astype(np.int64) + 0.0
@@ -252,7 +252,7 @@ class EnformerOps(EnformerData):
             as well as its format, display mode, and color.
         """
 
-        t_name = f"{track_name}.bigwig"
+        t_name = f"{track_name}.bw"
         bw = pyBigWig.open(t_name, "w")
         bw.addHeader([(chr_name, coord) for chr_name, coord in self.df_sizes.values])
         values_conversion = values.astype(np.int64) + 0.0

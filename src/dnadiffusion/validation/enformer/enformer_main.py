@@ -249,7 +249,7 @@ class LocusVisualization(EnformerBase):
             custom_max_dict=self.custom_max_dict,
         )
         os.system(
-            f"pyGenomeTracks --tracks {DATA_DIR}/tracks.ini --region {self.pygtrack_region} --dpi 200 --outFileName {self.id}.png"
+            f"pyGenomeTracks --tracks {DATA_DIR}/tracks.ini --region {self.pygtrack_region} --dpi 700 --outFileName {self.id}.png"
         )
 
         print("Generated tracks visualization")
@@ -273,15 +273,15 @@ class GeneratedEnformer(EnformerBase):
         self.show_track = show_track
 
         all_sequences = seq_extract(self.sequence_path, tag)
-        self.all_sequences = all_sequences[["SEQUENCE", "ID"]].values.tolist()
+        self.all_sequences = all_sequences[["SEQUENCE", "ID", "CELL_TYPE"]].values.tolist()
 
         if demo:
-            self.all_sequences = self.all_sequences[:50]
+            self.all_sequences = self.all_sequences[:20]
 
     def extract(self):
         file_modify = 1
-        captured_values = []
-        captured_values_target = []
+        captured_values_enh = []
+        captured_values_gene = []
         for i, s in tqdm(enumerate(self.all_sequences), total=len(self.all_sequences)):
             s_in = s[1]
             id_seq = s[0]
@@ -294,42 +294,41 @@ class GeneratedEnformer(EnformerBase):
                 modify_prefix=self.modify_prefix,
             )
 
-            out_in = self.eops.extract_from_position(self.enhancer_region, as_dataframe=True)
-            out_in = out_in.mean()
-            out_in["SEQ_ID"] = s_in
-            out_in["TARGET_NAME"] = "ENH_GATA1"
-            captured_values.append(out_in)
+            enh_in = self.eops.extract_from_position(self.enhancer_region, as_dataframe=True)
+            enh_in = enh_in.mean()
+            enh_in["SEQ_ID"] = s_in
+            enh_in["CELL_TYPE"] = s[2]
+            captured_values_enh.append(enh_in)
 
-            out_in = self.eops.extract_from_position(self.gene_region, as_dataframe=True)
-            out_in = out_in.mean()
-            out_in["SEQ_ID"] = id_seq
-            out_in["TARGET_NAME"] = "GATA1_TSS_2K"
-            captured_values_target.append(out_in)
+            gene_in = self.eops.extract_from_position(self.gene_region, as_dataframe=True)
+            gene_in = gene_in.mean()
+            gene_in["SEQUENCE"] = id_seq
+            captured_values_gene.append(gene_in)
 
             if (i != 0) and ((i + 1) % self.save_interval) == 0:
                 df_out_ENH = pd.DataFrame(
-                    [x.values.tolist() for x in captured_values], columns=["ENHANCER_" + x for x in out_in.index]
+                    [x.values.tolist() for x in captured_values_enh], columns=["ENHANCER_" + x for x in enh_in.index]
                 )
                 df_out_GENE = pd.DataFrame(
-                    [x.values.tolist() for x in captured_values_target], columns=["GENE_" + x for x in out_in.index]
+                    [x.values.tolist() for x in captured_values_gene], columns=["GENE_" + x for x in gene_in.index]
                 )
 
                 df_out = pd.concat([df_out_ENH, df_out_GENE], axis=1)
 
-                df_out.to_csv(f"{DATA_DIR}/{file_modify}_test_seqs.TXT", sep="\t", index=False)
+                df_out.to_csv(f"{DATA_DIR}/{file_modify}_partial_predictions.txt", sep="\t", index=False)
                 # Resetting captured values
-                captured_values = []
-                captured_values_target = []
+                captured_values_enh = []
+                captured_values_gene = []
                 file_modify += 1
 
         # Find all the files written to DATA_DIR from the above loop
-        files = sorted([f"{DATA_DIR}/{f}" for f in os.listdir(DATA_DIR) if f.endswith("_test_seqs.txt")])
+        files = sorted([f"{DATA_DIR}/{f}" for f in os.listdir(DATA_DIR) if f.endswith("_partial_predictions.txt")])
 
         df_out = pd.concat([pd.read_csv(f, sep="\t") for f in files], axis=0)
 
         # Save output
-        print(f"Saving output to {DATA_DIR}/{self.tag}_test_seqs_final.txt")
-        df_out.to_csv(f"{DATA_DIR}/{self.tag}_test_seqs_final.TXT", sep="\t", index=False)
+        print(f"Saving output to {DATA_DIR}/{self.tag}_enformer_predictions.txt")
+        df_out.to_csv(f"{DATA_DIR}/{self.tag}_enformer_predictions.txt", sep="\t", index=False)
 
         # Remove all the files written to DATA_DIR from the above loop
         for f in files:
@@ -429,6 +428,7 @@ if __name__ == "__main__":
         print(10 *"=")
         GeneratedEnformer(tag=tag).extract()
     """
+    GeneratedEnformer(tag="Generated", demo=True).extract()
     # GeneratedEnformer(tag="Generated", demo=True).extract()
     # EnformerBase(region="Random_Genome_Regions").capture_normalization_values(
     #     tag="Promoters", track_name="CAGE", amount=100
@@ -440,19 +440,23 @@ if __name__ == "__main__":
         gene_region=["chr20", 44355699, 44432845],
         pygtrack_region="chr20:44350699-44437845",
         # GM12878
-        # enhancer_region=["chr16", 28924139, 28924339],
+        # enhancer_region=["chr16", 28930777, 28930977],
         # gene_region=["chr16", 28931971, 28939342],
-        # pygtrack_region="chr16:28921971-28949342",
+        # pygtrack_region="chr16:28926971-28944342",
     ).extract()
     """
-
+    # LocusVisualization(
+    #     enhancer_region=["chr20", 44370692, 44370892],
+    #     gene_region=["chr20", 44355699, 44432845],
+    #     pygtrack_region="chr20:44350699-44437845",
+    # ).extract()
     # k562_sequence = TGAGCCAAAGTGTGCTTACCTGAGATAACCTCACCACCATGGCCTTGCTTGAGGAAGCTGAAGACGGTTTTCTGGTGATAAGCACAGTCGATACAGGCCTGGACAGCCTGCTGCAACACCACAGAGGCACGGGCTGGTCCAAAATGGTCAGGGAGTTGCTGGACCTTCTTCTTATCTAAGTGGGGGCCTGTGCTGCCATT
 
     # strong_gm = GCAACTTACAACCACAGAATTCAGTTCTCAAAATAGGACACAGAGAAAGTGAGACTGAGAAGTGTGGAAATTCCCCCAGCCTGTCGGACTGGACTAATGTTTCATTCGTAATTAGGTACAAAAAAGCCATCAGTACAGTGGAAAGCAGGGAGTTCAGATGTGACATATAATTCTTTTTCCCTATTCACTTTCTCTTCCCT
 
     # hepg2 = AAAAAAAGTGAGTGTGGCCTGCCACCTTGAAAGAGGTCACTGATTCGCTGTTACTAGGGCATTTGCTTTTTTGGACGAACACACCATCCTTTGATCAGTGGCATAGACTTGGATGACAGTTGGCCAAAGTAATGAGTGCAGTTTACTTAGGGACAAAGCAAAGGTGGTTGACCTGTATGGTATTTGAACTTACTGGCTTT
 
-    LocusVisualization(
+    """LocusVisualization(
         tag="Generated",
         seq_id="27724_GENERATED_GM12878",
         input_sequence=True,
@@ -468,8 +472,29 @@ if __name__ == "__main__":
             "normalized_H3K4ME3_K562_enformer": 60000,
         },
     ).extract()
+    """
     # roi_list = [
+    #     "91960_GENERATED_GM12878",
+    #     "40080_GENERATED_GM12878",
+    #     "85305_GENERATED_GM12878",
+    #     "10545_GENERATED_GM12878",
+    #     "24803_GENERATED_GM12878",
+    #     "70494_GENERATED_GM12878",
+    #     "57090_GENERATED_GM12878",
+    #     "77459_GENERATED_GM12878",
+    #     "48052_GENERATED_GM12878",
+    #     "67388_GENERATED_GM12878",
+    #     "40924_GENERATED_GM12878",
+    #     "46354_GENERATED_GM12878",
+    #     "91770_GENERATED_GM12878",
+    #     "90299_GENERATED_GM12878",
+    #     "24488_GENERATED_GM12878",
+    #     "34862_GENERATED_GM12878",
+    #     "796_GENERATED_GM12878",
+    #     "43320_GENERATED_GM12878",
+    #     "32410_GENERATED_GM12878",
     # ]
+    #
     # for sequence_id in roi_list:
     #     LocusVisualization(
     #         tag="Generated",
@@ -479,11 +504,11 @@ if __name__ == "__main__":
     #             "normalized_DNASE_GM12878_enformer": 1000,
     #             "normalized_DNASE_HepG2_enformer": 1000,
     #             "normalized_DNASE_K562_enformer": 1000,
-    #             "normalized_CAGE_GM12878_enformer": 350000,
-    #             "normalized_CAGE_HepG2_enformer": 350000,
-    #             "normalized_CAGE_K562_enformer": 350000,
-    #             "normalized_H3K4ME3_GM12878_enformer": 60000,
-    #             "normalized_H3K4ME3_HepG2_enformer": 60000,
-    #             "normalized_H3K4ME3_K562_enformer": 60000,
+    #             "normalized_CAGE_GM12878_enformer": 10000,
+    #             "normalized_CAGE_HepG2_enformer": 10000,
+    #             "normalized_CAGE_K562_enformer": 10000,
+    #             "normalized_H3K4ME3_GM12878_enformer": 5000,
+    #             "normalized_H3K4ME3_HepG2_enformer": 5000,
+    #             "normalized_H3K4ME3_K562_enformer": 5000,
     #         },
     #     ).extract()
