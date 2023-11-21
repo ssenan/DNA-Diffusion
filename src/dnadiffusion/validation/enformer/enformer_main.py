@@ -73,21 +73,21 @@ class EnformerBase:
             out_in["SEQ_ID"] = id_seq
             out_in["TARGET_NAME"] = "ITSELF"
             captured_values.append(out_in)
-            if (i != 0) and ((i + 1) % self.save_interval) == 0:
+            if (i != 0) and ((i + 1) % self.save_interval) == 0 or len(self.all_sequences) - i < self.save_interval:
                 df_out = pd.DataFrame([x.values.tolist() for x in captured_values], columns=out_in.index)
-                df_out.to_csv(f"{DATA_DIR}/{file_modify}_test_seqs.TXT", sep="\t", index=False)
+                df_out.to_csv(f"{DATA_DIR}/{file_modify}_partial_predictions.txt", sep="\t", index=False)
                 # Resetting captured values
                 captured_values = []
                 file_modify += 1
 
         # Find all the files written to DATA_DIR from the above loop
-        files = sorted([f"{DATA_DIR}/{f}" for f in os.listdir(DATA_DIR) if f.endswith("_test_seqs.TXT")])
+        files = sorted([f"{DATA_DIR}/{f}" for f in os.listdir(DATA_DIR) if f.endswith("_partial_predictions.txt")])
 
         df_out = pd.concat([pd.read_csv(f, sep="\t") for f in files], axis=0)
 
         # Save output
-        print(f"Saving output to {DATA_DIR}/{self.region}_test_seqs_final.TXT")
-        df_out.to_csv(f"{DATA_DIR}/{self.region}_test_seqs_final.TXT", sep="\t", index=False)
+        print(f"Saving output to {DATA_DIR}/{self.region}_enformer.txt")
+        df_out.to_csv(f"{DATA_DIR}/{self.region}_enformer.txt", sep="\t", index=False)
 
         # Remove all the files written to DATA_DIR from the above loop
         for f in files:
@@ -305,7 +305,7 @@ class GeneratedEnformer(EnformerBase):
             gene_in["SEQUENCE"] = id_seq
             captured_values_gene.append(gene_in)
 
-            if (i != 0) and ((i + 1) % self.save_interval) == 0:
+            if (i != 0) and ((i + 1) % self.save_interval) == 0 or len(self.all_sequences) - i < self.save_interval:
                 df_out_ENH = pd.DataFrame(
                     [x.values.tolist() for x in captured_values_enh], columns=["ENHANCER_" + x for x in enh_in.index]
                 )
@@ -423,7 +423,7 @@ class NormalizeTracks(EnformerBase):
 if __name__ == "__main__":
     # EnformerBase(region="Promoters").extract()
     # EnformerBase(region="Random_Genome_Regions").extract()
-    """for tag in ["Generated", "GM12878_positive", "HepG2_positive", "Test", "Training", "Validation", "Negative"]:
+    """for tag in ["Generated", "K562_positive", "GM12878_positive", "HepG2_positive", "Test", "Training", "Validation", "Negative"]:
         print(f"Running Enformer for {tag}")
         print(10 *"=")
         GeneratedEnformer(tag=tag).extract()
