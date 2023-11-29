@@ -6,13 +6,14 @@ from dnadiffusion.models.diffusion import Diffusion
 from dnadiffusion.models.unet import UNet
 from dnadiffusion.utils.sample_util import create_sample
 
+from dnadiffusion import DATA_DIR
 
 def sample(model_path: str, num_samples: int = 1000, heatmap: bool = False):
     # Instantiating data and model
     print("Loading data")
     encode_data = load_data(
-        data_path="src/dnadiffusion/data/K562_hESCT0_HepG2_GM12878_12k_sequences_per_group.txt",
-        saved_data_path="src/dnadiffusion/data/encode_data.pkl",
+        data_path=f"{DATA_DIR}/K562_hESCT0_HepG2_GM12878_12k_sequences_per_group.txt",
+        saved_data_path=f"{DATA_DIR}/encode_data.pkl",
         subset_list=[
             "GM12878_ENCLB441ZZZ",
             "hESCT0_ENCLB449ZZZ",
@@ -38,6 +39,8 @@ def sample(model_path: str, num_samples: int = 1000, heatmap: bool = False):
         timesteps=50,
     )
 
+    #diffusion = torch.compile(diffusion)
+
     # Load checkpoint
     print("Loading checkpoint")
     checkpoint_dict = torch.load(model_path)
@@ -52,16 +55,18 @@ def sample(model_path: str, num_samples: int = 1000, heatmap: bool = False):
     cell_list = list(encode_data["tag_to_numeric"].keys())
 
     for i in cell_num_list:
+        i = i + 3
         print(f"Generating {num_samples} samples for cell {encode_data['numeric_to_tag'][i]}")
         create_sample(
             diffusion,
             conditional_numeric_to_tag=encode_data["numeric_to_tag"],
             cell_types=encode_data["cell_types"],
-            number_of_samples=int(num_samples / 10),
+            number_of_samples=int(num_samples / 100),
             group_number=i,
             cond_weight_to_metric=1,
-            save_timesteps=False,
-            save_dataframe=True,
+            save_timesteps=True,
+            save_dataframe=False,
+            generate_attention_maps=False,
         )
     if heatmap:
         # Generate synthetic vs train heatmap
@@ -90,4 +95,4 @@ def sample(model_path: str, num_samples: int = 1000, heatmap: bool = False):
 
 
 if __name__ == "__main__":
-    sample()
+    sample("checkpoints/2000_copy.pt", num_samples=100000, heatmap=False)

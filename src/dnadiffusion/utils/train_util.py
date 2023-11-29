@@ -21,7 +21,7 @@ class TrainLoop:
         model: torch.nn.Module,
         accelerator: Accelerator,
         epochs: int = 10000,
-        loss_show_epoch: int = 10,
+        log_step_show: int = 50,
         sample_epoch: int = 500,
         save_epoch: int = 500,
         model_name: str = "model_48k_sequences_per_group_K562_hESCT0_HepG2_GM12878_12k",
@@ -34,7 +34,7 @@ class TrainLoop:
         self.optimizer = Adam(self.model.parameters(), lr=1e-4)
         self.accelerator = accelerator
         self.epochs = epochs
-        self.loss_show_epoch = loss_show_epoch
+        self.log_step_show = log_step_show
         self.sample_epoch = sample_epoch
         self.save_epoch = save_epoch
         self.model_name = model_name
@@ -55,6 +55,9 @@ class TrainLoop:
         seq_dataset = SequenceDataset(seqs=self.encode_data["X_train"], c=self.encode_data["x_train_cell_type"])
         self.train_dl = DataLoader(seq_dataset, batch_size=batch_size, shuffle=True, num_workers=8, pin_memory=True)
 
+        seq_dataset_val = SequenceDataset(seqs=self.encode_data["X_val"], c=self.encode_data["x_val_cell_type"])
+        self.val_dl = DataLoader(seq_dataset_val, batch_size=batch_size, shuffle=True, num_workers=8, pin_memory=True)
+
     def train_loop(self):
         # Prepare for training
         self.model, self.optimizer, self.train_dl = self.accelerator.prepare(self.model, self.optimizer, self.train_dl)
@@ -70,12 +73,19 @@ class TrainLoop:
             self.model.train()
 
             # Getting loss of current batch
-            for _, batch in enumerate(self.train_dl):
+            for step, batch in enumerate(self.train_dl):
+                self.global_step = epoch * len(self.train_dl) + step 
+
                 loss = self.train_step(batch)
 
-            # Logging loss
-            if epoch % self.loss_show_epoch == 0 and self.accelerator.is_main_process:
-                self.log_step(loss, epoch)
+            for step, batch in enumerate(self.val_dl):
+                self.model.eval()
+                val_loss = self.train_step(batch)
+                self.model.train()
+
+                # Logging loss
+                if step % self.log_step_show == 0 and self.accelerator.is_main_process:
+                    self.log_step(loss,val_loss, epoch)
 
             # Sampling
             if epoch % self.sample_epoch == 0 and self.accelerator.is_main_process:
@@ -103,7 +113,7 @@ class TrainLoop:
         self.accelerator.wait_for_everyone()
         return loss
 
-    def log_step(self, loss, epoch):
+    def log_step(self, loss, val_loss, epoch):
         if self.accelerator.is_main_process:
             self.accelerator.log(
                 {
@@ -111,11 +121,12 @@ class TrainLoop:
                     "test": self.test_kl,
                     "shuffle": self.shuffle_kl,
                     "loss": loss.item(),
+                    "val_loss": val_loss.item(),
+                    "epoch": epoch,
                     "seq_similarity": self.seq_similarity,
                 },
-                step=epoch,
+                step=self.global_step,
             )
-            print(f" Epoch {epoch} Loss:", loss.item())
 
     def sample(self):
         self.model.eval()
@@ -159,3 +170,101 @@ class TrainLoop:
             self.ema_model.load_state_dict(checkpoint_dict["ema_model"])
 
         self.train_loop()
+
+
+class KarrasTrainLoop(TrainLoop):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.unet = self.model.unet
+        self.optimizer = Adam(self.unet.parameters(), lr=1e-4)
+        if self.accelerator.is_main_process:
+            self.ema = EMA(0.995)
+            self.ema_model = copy.deepcopy(self.unet).eval().requires_grad_(False)
+
+    def train_loop(self):
+        # Prepare for training
+        self.unet, self.optimizer, self.train_dl = self.accelerator.prepare(self.unet, self.optimizer, self.train_dl)
+
+        # Initialize wandb
+        if self.accelerator.is_main_process:
+            """self.accelerator.init_trackers(
+                "dnadiffusion",
+                init_kwargs={"wandb": {"notes": "testing wandb accelerate script"}},
+            )
+            """
+
+        for epoch in tqdm(range(self.start_epoch, self.epochs + 1)):
+            self.unet.train()
+
+            # Getting loss of current batch
+            for step, batch in enumerate(self.train_dl):
+                self.global_step = epoch * len(self.train_dl) + step
+
+                loss = self.train_step(batch)
+
+                # Logging loss
+                if self.global_step % self.log_step_show == 0 and self.accelerator.is_main_process:
+                    self.log_step(loss, epoch)
+
+            if epoch % 10 == 0 and self.accelerator.is_main_process:
+                print("Epoch", epoch, "Loss", loss.mean().item())
+
+            # Sampling
+            if epoch % self.sample_epoch == 0 and self.accelerator.is_main_process:
+               self.sample()
+
+            # Saving model
+            if epoch % self.save_epoch == 0 and self.accelerator.is_main_process:
+                self.save_model(epoch)
+
+    def train_step(self, batch):
+        x, y = batch
+
+        with self.accelerator.autocast():
+            loss = self.model(x, y)
+
+
+        self.optimizer.zero_grad()
+        self.accelerator.backward(loss.mean())
+        self.accelerator.wait_for_everyone()
+        self.optimizer.step()
+
+        self.accelerator.wait_for_everyone()
+        if self.accelerator.is_main_process:
+            self.ema.step_ema(self.ema_model, self.accelerator.unwrap_model(self.unet))
+
+        self.accelerator.wait_for_everyone()
+        return loss
+
+    def sample(self):
+        self.unet.eval()
+        self.accelerator.unwrap_model(self.unet)
+
+        # Sample from the model
+        print("saving")
+        synt_df = create_sample(
+            self.model,
+            conditional_numeric_to_tag=self.encode_data["numeric_to_tag"],
+            cell_types=self.encode_data["cell_types"],
+            number_of_samples=int(self.num_sampling_to_compare_cells / 5),
+        )
+        self.seq_similarity = generate_similarity_using_train(self.encode_data["X_train"])
+        self.train_kl = compare_motif_list(synt_df, self.encode_data["train_motifs"])
+        self.test_kl = compare_motif_list(synt_df, self.encode_data["test_motifs"])
+        self.shuffle_kl = compare_motif_list(synt_df, self.encode_data["shuffle_motifs"])
+        print("Similarity", self.seq_similarity, "Similarity")
+        print("KL_TRAIN", self.train_kl, "KL")
+        print("KL_TEST", self.test_kl, "KL")
+        print("KL_SHUFFLE", self.shuffle_kl, "KL")
+
+    def save_model(self, epoch):
+        checkpoint_dict = {
+            "model": self.accelerator.get_state_dict(self.model),
+            "optimizer": self.optimizer.state_dict(),
+            "epoch": epoch,
+            "ema_model": self.accelerator.get_state_dict(self.ema_model),
+        }
+        torch.save(
+            checkpoint_dict,
+            f"checkpoints/epoch_{epoch}_{self.model_name}.pt",
+        )

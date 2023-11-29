@@ -78,7 +78,7 @@ def encode(seq, alphabet):
 
 class EMA:
     # https://github.com/dome272/Diffusion-Models-pytorch/blob/main/modules.py
-    def __init__(self, beta: float = 0.995) -> None:
+    def __init__(self, beta: float = 0.999) -> None:
         super().__init__()
         self.beta = beta
         self.step = 0
@@ -95,7 +95,7 @@ class EMA:
         old = old.to(device)
         return old * self.beta + (1 - self.beta) * new
 
-    def step_ema(self, ema_model: nn.Module, model: nn.Module, step_start_ema: int = 500) -> None:
+    def step_ema(self, ema_model: nn.Module, model: nn.Module, step_start_ema: int = 10000000) -> None:
         if self.step < step_start_ema:
             self.reset_parameters(ema_model, model)
             self.step += 1

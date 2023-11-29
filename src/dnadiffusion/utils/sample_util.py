@@ -7,6 +7,7 @@ import torch
 from tqdm import tqdm
 
 from dnadiffusion.utils.utils import convert_to_seq
+from dnadiffusion.models.diffusion import dpm2m
 
 
 def create_sample(
@@ -23,7 +24,7 @@ def create_sample(
     nucleotides = ["A", "C", "G", "T"]
     final_sequences = []
     for n_a in tqdm(range(number_of_samples)):
-        sample_bs = 10
+        sample_bs = 100
         if group_number:
             sampled = torch.from_numpy(np.array([group_number] * sample_bs))
         else:
@@ -47,7 +48,7 @@ def create_sample(
                 seqs_to_df[en] = [convert_to_seq(x, nucleotides) for x in step]
             final_sequences.append(pd.DataFrame(seqs_to_df))
 
-        if save_dataframe:
+        elif save_dataframe:
             # Only using the last timestep
             for en, step in enumerate(sampled_images[-1]):
                 final_sequences.append(convert_to_seq(step, nucleotides))
@@ -61,7 +62,7 @@ def create_sample(
     if save_timesteps:
         # Saving dataframe containing sequences for each timestep
         pd.concat(final_sequences, ignore_index=True).to_csv(
-            f"final_{conditional_numeric_to_tag[group_number]}.txt",
+            f"steps_{conditional_numeric_to_tag[group_number]}.txt",
             header=True,
             sep="\t",
             index=False,

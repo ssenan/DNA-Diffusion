@@ -1,18 +1,19 @@
 from accelerate import Accelerator, DistributedDataParallelKwargs
+import torch
 
 from dnadiffusion.data.dataloader import load_data
-from dnadiffusion.models.diffusion import Diffusion
+from dnadiffusion.models.diffusion import Diffusion, KarrasDiffusion
 from dnadiffusion.models.unet import UNet
-from dnadiffusion.utils.train_util import TrainLoop
+from dnadiffusion.utils.train_util import TrainLoop, KarrasTrainLoop
+from dnadiffusion import DATA_DIR
 
 
 def train():
-    kwargs = DistributedDataParallelKwargs(find_unused_parameters=True)
-    accelerator = Accelerator(kwargs_handlers=[kwargs], split_batches=True, log_with=["wandb"], mixed_precision="bf16")
+    accelerator = Accelerator(split_batches=True, log_with=["wandb"], mixed_precision="bf16")
 
     data = load_data(
-        data_path="src/dnadiffusion/data/K562_hESCT0_HepG2_GM12878_12k_sequences_per_group.txt",
-        saved_data_path="src/dnadiffusion/data/encode_data.pkl",
+        data_path=f"{DATA_DIR}/K562_hESCT0_HepG2_GM12878_12k_sequences_per_group.txt",
+        saved_data_path=f"{DATA_DIR}/encode_data.pkl",
         subset_list=[
             "GM12878_ENCLB441ZZZ",
             "hESCT0_ENCLB449ZZZ",
@@ -36,20 +37,22 @@ def train():
         timesteps=50,
     )
 
+    diffusion = torch.compile(diffusion)
+
     TrainLoop(
         data=data,
         model=diffusion,
         accelerator=accelerator,
         epochs=10000,
-        loss_show_epoch=10,
+        log_step_show=50,
         sample_epoch=500,
         save_epoch=500,
         model_name="model_48k_sequences_per_group_K562_hESCT0_HepG2_GM12878_12k",
         image_size=200,
         num_sampling_to_compare_cells=1000,
-        batch_size=960,
+        batch_size=480,
     ).train_loop()
-
+    #).load("./checkpoints/epoch_2000_model_48k_sequences_per_group_K562_hESCT0_HepG2_GM12878_12k.pt")
 
 if __name__ == "__main__":
     train()

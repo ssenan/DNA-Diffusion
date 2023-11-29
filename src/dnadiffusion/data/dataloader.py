@@ -11,11 +11,12 @@ import torchvision.transforms as T
 from torch.utils.data import DataLoader, Dataset
 
 from dnadiffusion.utils.utils import one_hot_encode
+from dnadiffusion import DATA_DIR
 
 
 def load_data(
-    data_path: str = "K562_hESCT0_HepG2_GM12878_12k_sequences_per_group.txt",
-    saved_data_path: str = "encode_data.pkl",
+    data_path: str = f"{DATA_DIR}/K562_hESCT0_HepG2_GM12878_12k_sequences_per_group.txt",
+    saved_data_path: str = f"{DATA_DIR}/encode_data.pkl",
     subset_list: List = [
         "GM12878_ENCLB441ZZZ",
         "hESCT0_ENCLB449ZZZ",
@@ -56,11 +57,20 @@ def load_data(
     X_train = np.array([x.T.tolist() for x in x_train_seq])
     X_train[X_train == 0] = -1
 
+    # Create test dataset using chr1
+    val_df = encode_data["test"]["df"]
+    val_test_seq = np.array([one_hot_encode(x, nucleotides, 200) for x in val_df["sequence"] if "N" not in x])
+    X_val = np.array([x.T.tolist() for x in val_test_seq])
+    X_val[X_val == 0] = -1
+
     # Creating labels
     tag_to_numeric = {x: n for n, x in enumerate(df["TAG"].unique(), 1)}
     numeric_to_tag = dict(enumerate(df["TAG"].unique(), 1))
     cell_types = list(numeric_to_tag.keys())
     x_train_cell_type = torch.tensor([tag_to_numeric[x] for x in df["TAG"]])
+
+    # Creating labels for test
+    x_val_cell_type = torch.tensor([tag_to_numeric[x] for x in val_df["TAG"]])
 
     # Collecting variables into a dict
     encode_data_dict = {
@@ -74,7 +84,9 @@ def load_data(
         "numeric_to_tag": numeric_to_tag,
         "cell_types": cell_types,
         "X_train": X_train,
+        "X_val": X_val,
         "x_train_cell_type": x_train_cell_type,
+        "x_val_cell_type": x_val_cell_type,
     }
 
     return encode_data_dict

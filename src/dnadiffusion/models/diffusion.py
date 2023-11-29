@@ -191,3 +191,89 @@ class Diffusion(nn.Module):
         t = torch.randint(0, self.timesteps, (b,), device=device).long()
 
         return self.p_losses(x, t, classes)
+
+
+class KarrasDiffusion(nn.Module):
+    def __init__(self, unet: nn.Module, sigma_data: float = 0.5, p_mean: float = -1.2, p_std: float = 1.2):
+        super().__init__()
+        self.unet = unet
+        self.sigma_data = sigma_data
+        self.p_mean = p_mean
+        self.p_std = p_std
+
+    def network_scaling(self, x, sigma, y):
+        b = x.shape[0]
+        if isinstance(sigma, float):
+            sigma = torch.full((b,), sigma, device=x.device)
+        sigma = sigma[:, None, None, None]
+
+        c_skip = self.sigma_data / (sigma ** 2 + self.sigma_data ** 2)
+        c_out = sigma * self.sigma_data / (sigma ** 2 + self.sigma_data ** 2) ** 0.5
+        c_in = 1 / (sigma ** 2 + self.sigma_data ** 2) ** 0.5
+        c_noise = sigma.log() / 4
+
+        net_out = self.unet(c_in * x, c_noise.flatten(), y)
+        out = c_skip * x + c_out * net_out
+
+        return out
+
+    def forward(self, x, y):
+        b, c, h, w = x.shape
+        x = x.type(torch.float32)
+        y = y.type(torch.long)
+        
+        # Add cfg
+        context_mask = torch.bernoulli(torch.zeros(y.shape[0]) + (1 - 0.1)).to(x.device)
+        y = y * context_mask
+        y = y.type(torch.long)
+
+        # Noise
+        rnd_normal = torch.randn((b,), device=x.device)
+        sigmas = (rnd_normal * self.p_std + self.p_mean).exp()
+        padded_sigmas = sigmas[:, None, None, None]
+        noise = torch.randn_like(x)
+        x_noise = x + padded_sigmas * noise
+
+        out = self.network_scaling(x_noise, sigmas, y)
+        losses = F.smooth_l1_loss(out, x_noise, reduction="none")
+        losses = (losses.flatten(1).sum(1))/(losses.numel() / losses.size(0))
+        losses = (sigmas ** 2 + self.sigma_data ** 2) * (sigmas * self.sigma_data) * losses
+        return losses
+    
+
+def dpm2m(
+    model,
+    x,
+    y,
+    num_steps=18,
+    sigma_min=0.002,
+    sigma_max=80,
+    rho=7,
+    eta = 0.,
+):
+    steps = torch.arange(num_steps, dtype=torch.float64, device=x.device)
+    sigmas = (sigma_max ** (1 / rho) + steps / (num_steps - 1) * (sigma_min ** (1 / rho) - sigma_max ** (1 / rho))) ** rho
+    sigmas = torch.cat([torch.as_tensor(sigmas), torch.zeros_like(sigmas[:1])])
+    s_in = x.new_ones([x.shape[0]])
+
+    old_denoised = None
+    h_last = None
+
+    for i in range(len(sigmas) - 1):
+        denoised = model(x, sigmas[i] * s_in, y)
+        if sigmas[i + 1] == 0:
+            x = denoised
+        else:
+            t, s = -sigmas[i].log(), -sigmas[i + 1].log()
+            h = s - t
+            eta_h = eta * h
+
+            x = sigmas[i + 1] / sigmas[i] * (-eta_h).exp() * x + (-h - eta_h).expm1().neg() * denoised
+
+            if old_denoised is not None:
+                r = h_last / h
+                x = x + ((-h - eta_h).expm1().neg() / (-h - eta_h) + 1) * (1 / r) * (denoised - old_denoised)
+            
+        old_denoised = denoised
+        h_last = h
+    return x
