@@ -136,7 +136,7 @@ class TrainLoop:
                     "epoch": epoch,
                     "seq_similarity": self.seq_similarity,
                 },
-                step=epoch,
+                step=self.global_step,
             )
 
     def sample(self):

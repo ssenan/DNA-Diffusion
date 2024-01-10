@@ -43,14 +43,14 @@ def train():
         data=data,
         model=diffusion,
         accelerator=accelerator,
-        epochs=10000,
+        epochs=20000,
         log_epoch_show=1,
         sample_epoch=500,
         save_epoch=500,
         model_name="model_48k_sequences_per_group_K562_hESCT0_HepG2_GM12878_12k",
         image_size=200,
         num_sampling_to_compare_cells=1000,
-        batch_size=480,
+        batch_size=960,
     ).train_loop()
     #).load("./checkpoints/epoch_2000_model_48k_sequences_per_group_K562_hESCT0_HepG2_GM12878_12k.pt")
 
