@@ -21,7 +21,8 @@ class TrainLoop:
         model: torch.nn.Module,
         accelerator: Accelerator,
         epochs: int = 10000,
-        log_step_show: int = 50,
+        # log_step_show: int = 50,
+        log_epoch_show: int = 50,
         sample_epoch: int = 500,
         save_epoch: int = 500,
         model_name: str = "model_48k_sequences_per_group_K562_hESCT0_HepG2_GM12878_12k",
@@ -34,7 +35,8 @@ class TrainLoop:
         self.optimizer = Adam(self.model.parameters(), lr=1e-4)
         self.accelerator = accelerator
         self.epochs = epochs
-        self.log_step_show = log_step_show
+        # self.log_step_show = log_step_show
+        self.log_epoch_show = log_epoch_show
         self.sample_epoch = sample_epoch
         self.save_epoch = save_epoch
         self.model_name = model_name
@@ -46,10 +48,10 @@ class TrainLoop:
             self.ema_model = copy.deepcopy(self.model).eval().requires_grad_(False)
 
         # Metrics
-        self.train_kl, self.test_kl, self.shuffle_kl = 1, 1, 1
+        self.train_kl, self.validation_kl, self.shuffle_kl = 1, 1, 1
         self.seq_similarity = 1
 
-        self.start_epoch = 1
+        self.start_epoch = 0
 
         # Dataloader
         seq_dataset = SequenceDataset(seqs=self.encode_data["X_train"], c=self.encode_data["x_train_cell_type"])
@@ -69,30 +71,32 @@ class TrainLoop:
                 init_kwargs={"wandb": {"notes": "testing wandb accelerate script"}},
             )
 
-        for epoch in tqdm(range(self.start_epoch, self.epochs + 1)):
+        for epoch in tqdm(range(self.start_epoch, self.epochs)):
             self.model.train()
+            total_loss = 0.0
 
             # Getting loss of current batch
             for step, batch in enumerate(self.train_dl):
                 self.global_step = epoch * len(self.train_dl) + step 
-
                 loss = self.train_step(batch)
+                total_loss += loss.item()
 
-            for step, batch in enumerate(self.val_dl):
+            with torch.no_grad():
                 self.model.eval()
-                val_loss = self.train_step(batch)
-                self.model.train()
+                for _, batch in enumerate(self.val_dl):
+                    val_loss = self.validation_step(batch)
+            self.model.train()
 
-                # Logging loss
-                if step % self.log_step_show == 0 and self.accelerator.is_main_process:
-                    self.log_step(loss,val_loss, epoch)
+            # Logging loss
+            if epoch % self.log_epoch_show == 0  and self.accelerator.is_main_process:
+                self.log_step(loss, val_loss, epoch)
 
             # Sampling
-            if epoch % self.sample_epoch == 0 and self.accelerator.is_main_process:
+            if (epoch+1) % self.sample_epoch == 0 and self.accelerator.is_main_process:
                 self.sample()
 
             # Saving model
-            if epoch % self.save_epoch == 0 and self.accelerator.is_main_process:
+            if (epoch+1) % self.save_epoch == 0 and self.accelerator.is_main_process:
                 self.save_model(epoch)
 
     def train_step(self, batch):
@@ -112,20 +116,27 @@ class TrainLoop:
 
         self.accelerator.wait_for_everyone()
         return loss
+    
+    def validation_step(self, batch):
+        x, y = batch
+
+        with self.accelerator.autocast():
+            loss = self.model(x, y)
+        return loss
 
     def log_step(self, loss, val_loss, epoch):
         if self.accelerator.is_main_process:
             self.accelerator.log(
                 {
                     "train": self.train_kl,
-                    "test": self.test_kl,
+                    "validation": self.validation_kl,
                     "shuffle": self.shuffle_kl,
                     "loss": loss.item(),
                     "val_loss": val_loss.item(),
                     "epoch": epoch,
                     "seq_similarity": self.seq_similarity,
                 },
-                step=self.global_step,
+                step=epoch,
             )
 
     def sample(self):
@@ -141,11 +152,11 @@ class TrainLoop:
         )
         self.seq_similarity = generate_similarity_using_train(self.encode_data["X_train"])
         self.train_kl = compare_motif_list(synt_df, self.encode_data["train_motifs"])
-        self.test_kl = compare_motif_list(synt_df, self.encode_data["test_motifs"])
+        self.validation_kl = compare_motif_list(synt_df, self.encode_data["test_motifs"])
         self.shuffle_kl = compare_motif_list(synt_df, self.encode_data["shuffle_motifs"])
         print("Similarity", self.seq_similarity, "Similarity")
         print("KL_TRAIN", self.train_kl, "KL")
-        print("KL_TEST", self.test_kl, "KL")
+        print("KL_TEST", self.validation_kl, "KL")
         print("KL_SHUFFLE", self.shuffle_kl, "KL")
 
     def save_model(self, epoch):

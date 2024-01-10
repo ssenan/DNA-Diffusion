@@ -24,7 +24,7 @@ def create_sample(
     nucleotides = ["A", "C", "G", "T"]
     final_sequences = []
     for n_a in tqdm(range(number_of_samples)):
-        sample_bs = 100
+        sample_bs = 10
         if group_number:
             sampled = torch.from_numpy(np.array([group_number] * sample_bs))
         else:

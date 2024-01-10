@@ -37,14 +37,14 @@ def train():
         timesteps=50,
     )
 
-    diffusion = torch.compile(diffusion)
+    # diffusion = torch.compile(diffusion)
 
     TrainLoop(
         data=data,
         model=diffusion,
         accelerator=accelerator,
         epochs=10000,
-        log_step_show=50,
+        log_epoch_show=1,
         sample_epoch=500,
         save_epoch=500,
         model_name="model_48k_sequences_per_group_K562_hESCT0_HepG2_GM12878_12k",

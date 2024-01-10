@@ -44,11 +44,14 @@ def load_data(
     train_motifs = encode_data["train"]["motifs"]
     train_motifs_cell_specific = encode_data["train"]["final_subset_motifs"]
 
+    validation_motifs = encode_data["validation"]["motifs"]
+    validation_motifs_cell_specific = encode_data["validation"]["final_subset_motifs"]
+
     test_motifs = encode_data["test"]["motifs"]
     test_motifs_cell_specific = encode_data["test"]["final_subset_motifs"]
 
-    shuffle_motifs = encode_data["train_shuffled"]["motifs"]
-    shuffle_motifs_cell_specific = encode_data["train_shuffled"]["final_subset_motifs"]
+    shuffle_motifs = encode_data["validation_shuffle"]["motifs"]
+    shuffle_motifs_cell_specific = encode_data["validation_shuffle"]["final_subset_motifs"]
 
     # Creating sequence dataset
     df = encode_data["train"]["df"]
@@ -58,7 +61,7 @@ def load_data(
     X_train[X_train == 0] = -1
 
     # Create test dataset using chr1
-    val_df = encode_data["test"]["df"]
+    val_df = encode_data["validation"]["df"]
     val_test_seq = np.array([one_hot_encode(x, nucleotides, 200) for x in val_df["sequence"] if "N" not in x])
     X_val = np.array([x.T.tolist() for x in val_test_seq])
     X_val[X_val == 0] = -1
@@ -76,6 +79,8 @@ def load_data(
     encode_data_dict = {
         "train_motifs": train_motifs,
         "train_motifs_cell_specific": train_motifs_cell_specific,
+        "validation_motifs": validation_motifs,
+        "validation_motifs_cell_specific": validation_motifs_cell_specific,
         "test_motifs": test_motifs,
         "test_motifs_cell_specific": test_motifs_cell_specific,
         "shuffle_motifs": shuffle_motifs,
@@ -179,6 +184,7 @@ def preprocess_data(
 
     # Creating train/test/shuffle groups
     df_test = df[df["chr"] == "chr1"].reset_index(drop=True)
+    df_val = df[df["chr"] == "chr2"].reset_index(drop=True)
     df_train_shuffled = df[df["chr"] == "chr2"].reset_index(drop=True)
     df_train = df_train = df[(df["chr"] != "chr1") & (df["chr"] != "chr2")].reset_index(drop=True)
 
@@ -188,15 +194,16 @@ def preprocess_data(
 
     # Getting motif information from the sequences
     train = generate_motifs_and_fastas(df_train, "train", number_of_sequences_to_motif_creation, subset_list)
+    validation = generate_motifs_and_fastas(df_val, "validation", number_of_sequences_to_motif_creation, subset_list)
     test = generate_motifs_and_fastas(df_test, "test", number_of_sequences_to_motif_creation, subset_list)
-    train_shuffled = generate_motifs_and_fastas(
+    validation_shuffle = generate_motifs_and_fastas(
         df_train_shuffled,
-        "train_shuffled",
+        "validation_shuffle",
         number_of_sequences_to_motif_creation,
         subset_list,
     )
 
-    combined_dict = {"train": train, "test": test, "train_shuffled": train_shuffled}
+    combined_dict = {"train": train, "validation": validation, "test": test, "validation_shuffle": validation_shuffle}
 
     # Writing to pickle
     if save_output:
