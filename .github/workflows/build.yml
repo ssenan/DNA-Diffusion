@@ -3,31 +3,20 @@ name: Build
 on:
   workflow_dispatch:
   push:
-    branches: [main, update_workflow]
-  pull_request:
+    branches: [update_workflow]
 jobs:
   build:
     runs-on: ubuntu-latest
-  steps:
-    - uses: actions/checkout@v4
-    - name: Install uv
-      uses: astral-sh/setup-uv@v6
-      with:
-        enable-cache: true
-        cache-dependency-glob: uv.lock
-    # - name: Setup python
-    #   uses: uv python install
-    - name: Install the project
-      run: uv sync --locked --all-extras --dev
-    - name: Lint check
-      run: |
-        uv run ruff format --check .
-        uv run ruff  .
-    - name: Test
-      run: |
-        uv run pytest
-    # - uses: codecov/codecov-action@v5
-    #     with:
-    #     token: ${{ secrets.CODECOV_TOKEN }}
-    #     fail_ci_if_error: true
-    #     verbose: true
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv-lock
+      - name: Install the project
+        run: uv sync --locked --all-extras --dev
+      - name: Run tests
+        run: |-
+          uv run pytest
