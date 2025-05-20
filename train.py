@@ -81,7 +81,7 @@ def train(
             val_losses.append(val_loss)
 
         avg_val_loss = sum(val_losses) / len(val_losses) if val_losses else float("inf")
-        # print(f"Epoch: {epoch}, Train Loss: {loss}, Val Loss: {avg_val_loss}")
+        print(f"Epoch: {epoch}, Train Loss: {loss}, Val Loss: {avg_val_loss}")
 
         if rank_0 == 0 and use_wandb:
             wandb.log({"loss": loss, "val_loss": avg_val_loss, "epoch": epoch}, step=global_step)

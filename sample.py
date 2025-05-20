@@ -12,6 +12,7 @@ def sample(
     checkpoint_path: str,
     sample_batch_size: int,
     number_of_samples: int,
+    continuous_vector: list[float] = None,
 ) -> None:
     print(data)
     """numeric_to_tag_dict, cell_num_list, cell_list = (
@@ -34,21 +35,43 @@ def sample(
     # Send model to device
     print("Sending model to device")
     model = model.to("cuda") if torch.cuda.is_available() else model
-
-    for i in cell_num_list:
-        print(f"Generating {number_of_samples} samples for cell {numeric_to_tag_dict[i]}")
+    
+    # Check if model uses continuous conditioning
+    use_continuous = hasattr(model.model, 'use_continuous_conditioning') and model.model.use_continuous_conditioning
+    print(f"Model using continuous conditioning: {use_continuous}")
+    
+    if use_continuous and continuous_vector is not None:
+        # If continuous vector is provided, generate only one sample using this vector
+        print(f"Generating {number_of_samples} samples with continuous vector: {continuous_vector}")
         create_sample(
             model,
             cell_types=cell_num_list,
             sample_bs=sample_batch_size,
             conditional_numeric_to_tag=numeric_to_tag_dict,
             number_of_samples=number_of_samples,
-            group_number=i,
+            group_number=None,  # No specific group when using continuous vector
             cond_weight_to_metric=1.0,
             save_timesteps=False,
             save_dataframe=True,
             generate_attention_maps=False,
+            continuous_vector=continuous_vector,
         )
+    else:
+        # Generate samples for each cell type
+        for i in cell_num_list:
+            print(f"Generating {number_of_samples} samples for cell {numeric_to_tag_dict[i]}")
+            create_sample(
+                model,
+                cell_types=cell_num_list,
+                sample_bs=sample_batch_size,
+                conditional_numeric_to_tag=numeric_to_tag_dict,
+                number_of_samples=number_of_samples,
+                group_number=i,
+                cond_weight_to_metric=1.0,
+                save_timesteps=False,
+                save_dataframe=True,
+                generate_attention_maps=False,
+            )
 
 
 @hydra.main(config_path="configs", config_name="sample", version_base="1.3")

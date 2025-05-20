@@ -1,3 +1,5 @@
-checkpoint_path: "model.pt"
-sample_batch_size: 10
-number_of_samples: 1000
+# checkpoint_path: "model.pt"
+checkpoint_path: "checkpoints/model_epoch12_step13_valloss_0.109944.pt"
+sample_batch_size: 1
+number_of_samples: 10
+continuous_vector: [0.5, 0.0, 0.3, 0.0]  # [K562, hESCT0, HepG2, GM12878] values between 0-1

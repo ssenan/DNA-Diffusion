@@ -69,12 +69,22 @@ class Diffusion(nn.Module):
 
         if classes is not None:
             n_sample = classes.shape[0]
-            context_mask = torch.ones_like(classes).to(device)
-            # make 0 index unconditional
-            # double the batch
-            classes = classes.repeat(2)
-            context_mask = context_mask.repeat(2)
-            context_mask[n_sample:] = 0.0
+            
+            # Check if classes is continuous (2D) or discrete (1D)
+            if len(classes.shape) > 1:
+                # Handle continuous conditioning - shape will be [batch_size, n_classes]
+                context_mask = torch.ones(classes.shape[0], 1).to(device)
+                # Double the batch for classifier-free guidance
+                classes = torch.cat([classes, torch.zeros_like(classes)], dim=0)
+                context_mask = torch.cat([context_mask, torch.zeros_like(context_mask)], dim=0)
+            else:
+                # Handle discrete conditioning - shape will be [batch_size]
+                context_mask = torch.ones_like(classes).to(device)
+                # Double the batch
+                classes = classes.repeat(2)
+                context_mask = context_mask.repeat(2)
+                context_mask[n_sample:] = 0.0
+                
             sampling_fn = partial(
                 self.p_sample_guided,
                 classes=classes,
@@ -118,7 +128,7 @@ class Diffusion(nn.Module):
         # adapted from: https://openreview.net/pdf?id=qw8AKxfYbI
         batch_size = x.shape[0]
         device = self.device
-        # double to do guidance with
+        # double to do guidance with (Already doubled in p_sample_loop for continuous case)
         t_double = t.repeat(2).to(device)
         x_double = x.repeat(2, 1, 1, 1).to(device)
         betas_t = extract(self.betas, t_double, x_double.shape, device)
@@ -126,8 +136,17 @@ class Diffusion(nn.Module):
         sqrt_recip_alphas_t = extract(self.sqrt_recip_alphas, t_double, x_double.shape, device)
 
         # classifier free sampling interpolates between guided and non guided using `cond_weight`
-        classes_masked = classes * context_mask
-        classes_masked = classes_masked.type(torch.long)
+        # Check if we're using continuous conditioning (will be a 2D tensor)
+        if len(classes.shape) > 1:
+            # For continuous conditioning, apply mask with broadcasting
+            # context_mask is [batch_size, 1] for continuous case
+            classes_masked = classes * context_mask
+        else:
+            # For discrete conditioning
+            classes_masked = classes * context_mask
+            # Convert to long for discrete conditioning
+            classes_masked = classes_masked.type(torch.long)
+            
         # model = self.accelerator.unwrap_model(self.model)
         self.model.output_attention = True
         preds, cross_map_full = self.model(x_double, time=t_double, classes=classes_masked)
@@ -170,8 +189,18 @@ class Diffusion(nn.Module):
 
         # Mask for unconditional guidance
         classes = classes * context_mask
-        # nn.Embedding needs type to be long, multiplying with mask changes type
-        classes = classes.type(torch.long)
+        
+        # Check if we're using continuous conditioning
+        if hasattr(self.model, 'use_continuous_conditioning') and self.model.use_continuous_conditioning:
+            # For continuous conditioning, keep as float
+            # If using a vector of continuous values, we apply the mask to zero out vector elements
+            if len(classes.shape) > 1:  # This is a vector of continuous values
+                context_mask = context_mask.unsqueeze(1).expand_as(classes)
+                classes = classes * context_mask
+        else:
+            # For discrete conditioning, convert to long
+            classes = classes.type(torch.long)
+            
         predicted_noise = self.model(x_noisy, t, classes)
 
         if loss_type == "l1":
@@ -187,7 +216,9 @@ class Diffusion(nn.Module):
 
     def forward(self, x, classes):
         device = self.device
-        classes = classes.type(torch.long)
+        # Only convert to long if not using continuous conditioning
+        if not (hasattr(self.model, 'use_continuous_conditioning') and self.model.use_continuous_conditioning):
+            classes = classes.type(torch.long)
         b = x.shape[0]
         t = torch.randint(0, self.timesteps, (b,), device=device).long()
 

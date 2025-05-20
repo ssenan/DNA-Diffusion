@@ -17,6 +17,7 @@ def get_dataset(
     load_saved_data: bool,
     debug: bool,
     output_path: str | None = None,
+    use_continuous_conditioning: bool = False,
 ) -> tuple[Dataset, Dataset, list[int], dict[int, str]]:
     encode_data = load_data(
         data_path,
@@ -39,8 +40,25 @@ def get_dataset(
     cell_num_list = encode_data["cell_types"]
     numeric_to_tag_dict = encode_data["numeric_to_tag"]
 
-    train_data = SequenceDataset(x_data, y_data)
-    val_data = SequenceDataset(x_val_data, y_val_data)
+    # If using continuous conditioning, convert labels to one-hot vectors
+    if use_continuous_conditioning:
+        num_classes = len(encode_data["numeric_to_tag"]) + 1  # +1 for index 0
+        # Convert discrete labels to one-hot vectors
+        y_data_one_hot = torch.zeros(y_data.size(0), num_classes)
+        y_data_one_hot.scatter_(1, y_data.unsqueeze(1), 1)
+        # Remove the first column (for index 0) if not used
+        y_data_one_hot = y_data_one_hot[:, 1:]
+
+        y_val_one_hot = torch.zeros(y_val_data.size(0), num_classes)
+        y_val_one_hot.scatter_(1, y_val_data.unsqueeze(1), 1)
+        # Remove the first column (for index 0) if not used
+        y_val_one_hot = y_val_one_hot[:, 1:]
+
+        train_data = SequenceDataset(x_data, y_data_one_hot)
+        val_data = SequenceDataset(x_val_data, y_val_one_hot)
+    else:
+        train_data = SequenceDataset(x_data, y_data)
+        val_data = SequenceDataset(x_val_data, y_val_data)
 
     return train_data, val_data, cell_num_list, numeric_to_tag_dict
 

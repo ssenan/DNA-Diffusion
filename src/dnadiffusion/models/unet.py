@@ -26,8 +26,9 @@ class UNet(nn.Module):
         channels: int = 1,
         resnet_block_groups: int = 8,
         learned_sinusoidal_dim: int = 18,
-        num_classes: int = 10,
+        num_classes: int = 4,
         output_attention: bool = False,
+        use_continuous_conditioning: bool = False,
     ) -> None:
         super().__init__()
 
@@ -36,6 +37,7 @@ class UNet(nn.Module):
         # if you want to do self conditioning uncomment this
         input_channels = channels
         self.output_attention = output_attention
+        self.use_continuous_conditioning = use_continuous_conditioning
 
         init_dim = default(init_dim, dim)
         self.init_conv = nn.Conv2d(input_channels, init_dim, (7, 7), padding=3)
@@ -57,8 +59,18 @@ class UNet(nn.Module):
             nn.Linear(time_dim, time_dim),
         )
 
+        # Handle both discrete and continuous conditioning
         if num_classes is not None:
-            self.label_emb = nn.Embedding(num_classes, time_dim)
+            if use_continuous_conditioning:
+                # For continuous conditioning, use a linear projection
+                self.condition_proj = nn.Sequential(
+                    nn.Linear(num_classes, time_dim//2),
+                    nn.GELU(),
+                    nn.Linear(time_dim//2, time_dim)
+                )
+            else:
+                # For discrete conditioning, use the original embedding
+                self.label_emb = nn.Embedding(num_classes, time_dim)
 
         # layers
         self.downs = nn.ModuleList([])
@@ -119,10 +131,19 @@ class UNet(nn.Module):
         t_cross = t_start.clone()
 
         if classes is not None:
-            t_start += self.label_emb(classes)
-            t_mid += self.label_emb(classes)
-            t_end += self.label_emb(classes)
-            t_cross += self.label_emb(classes)
+            if self.use_continuous_conditioning:
+                # For continuous conditioning, directly project the continuous vector
+                condition_embedding = self.condition_proj(classes)
+                t_start += condition_embedding
+                t_mid += condition_embedding
+                t_end += condition_embedding
+                t_cross += condition_embedding
+            else:
+                # For discrete conditioning, use the embedding layer
+                t_start += self.label_emb(classes)
+                t_mid += self.label_emb(classes)
+                t_end += self.label_emb(classes)
+                t_cross += self.label_emb(classes)
 
         h = []
 

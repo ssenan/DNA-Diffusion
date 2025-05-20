@@ -6,7 +6,7 @@ batch_size: 1
 sample_batch_size: 1
 num_epochs: 2200
 min_epochs: 5
-patience: 2
+patience: 100000
 log_step: 50
 sample_epoch: 50000
 number_of_samples: 10

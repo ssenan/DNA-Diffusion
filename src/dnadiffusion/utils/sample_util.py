@@ -17,17 +17,52 @@ def create_sample(
     save_timesteps: bool = False,
     save_dataframe: bool = False,
     generate_attention_maps: bool = False,
+    continuous_vector: list[float] = None,
 ) -> None:
     nucleotides = ["A", "C", "G", "T"]
     final_sequences = []
     num_batches = number_of_samples // sample_bs
+    
+    # Check if we're using continuous conditioning
+    use_continuous = hasattr(model.model, 'use_continuous_conditioning') and model.model.use_continuous_conditioning
+    
     for n_a in tqdm(range(num_batches)):
-        if group_number:
-            sampled = torch.from_numpy(np.array([group_number] * sample_bs))
+        if use_continuous and continuous_vector is not None:
+            # If a continuous vector is provided, use it
+            print(f"Using continuous vector: {continuous_vector}")
+            continuous_tensor = torch.tensor([continuous_vector] * sample_bs, dtype=torch.float)
+            classes = continuous_tensor.to(model.device)
+        elif group_number:
+            if use_continuous:
+                # If continuous conditioning but with a specific cell type,
+                # create a one-hot vector for that cell type
+                num_classes = len(conditional_numeric_to_tag)
+                one_hot = torch.zeros(sample_bs, num_classes)
+                # Convert cell index to one-hot position
+                idx = cell_types.index(group_number) if group_number in cell_types else 0
+                one_hot[:, idx] = 1.0
+                classes = one_hot.to(model.device)
+                print(f"Using one-hot vector for cell type {conditional_numeric_to_tag[group_number]}: {one_hot[0].tolist()}")
+            else:
+                # Traditional discrete conditioning
+                sampled = torch.from_numpy(np.array([group_number] * sample_bs))
+                classes = sampled.float().to(model.device)
+                print(f"Using discrete conditioning with cell type: {conditional_numeric_to_tag[group_number]}")
         else:
-            sampled = torch.from_numpy(np.random.choice(cell_types, sample_bs))
-
-        classes = sampled.float().to(model.device)
+            if use_continuous:
+                # Random cell type with continuous conditioning
+                num_classes = len(conditional_numeric_to_tag)
+                sampled_indices = np.random.choice(len(cell_types), sample_bs)
+                one_hot = torch.zeros(sample_bs, num_classes)
+                for i, idx in enumerate(sampled_indices):
+                    one_hot[i, idx] = 1.0
+                classes = one_hot.to(model.device)
+                print("Using random continuous conditioning (one-hot vectors)")
+            else:
+                # Random cell type with discrete conditioning
+                sampled = torch.from_numpy(np.random.choice(cell_types, sample_bs))
+                classes = sampled.float().to(model.device)
+                print("Using random discrete conditioning")
 
         if generate_attention_maps:
             sampled_images, cross_att_values = model.sample_cross(
@@ -56,10 +91,21 @@ def create_sample(
                 )
                 final_sequences.append(seq_final)
 
+    # Determine the filename based on conditioning type
+    if continuous_vector is not None:
+        # For continuous vector, create a filename based on the vector values
+        filename = "continuous_" + "_".join([f"{v:.2f}" for v in continuous_vector])
+    elif group_number:
+        # For discrete group, use the group name
+        filename = conditional_numeric_to_tag[group_number]
+    else:
+        # For random sampling
+        filename = "random_sampling"
+        
     if save_timesteps:
         # Saving dataframe containing sequences for each timestep
         pd.concat(final_sequences, ignore_index=True).to_csv(
-            f"data/outputs/{conditional_numeric_to_tag[group_number]}.txt",
+            f"data/outputs/{filename}.txt",
             header=True,
             sep="\t",
             index=False,
@@ -68,6 +114,6 @@ def create_sample(
 
     if save_dataframe:
         # Saving list of sequences to txt file
-        with open(f"data/outputs/{conditional_numeric_to_tag[group_number]}.txt", "w") as f:
+        with open(f"data/outputs/{filename}.txt", "w") as f:
             f.write("\n".join(final_sequences))
         return
