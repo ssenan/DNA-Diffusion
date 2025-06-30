@@ -116,7 +116,6 @@ def load_data(
     data_path: str,
     saved_data_path: str,
     load_saved_data: bool,
-    output_path: str | None = None,
     sequence_length: int = 200,
 ):
     # Preprocessing data
@@ -125,6 +124,7 @@ def load_data(
             encode_data = pickle.load(f)
 
     else:
+        output_path = saved_data_path
         encode_data = preprocess_data(data_path, output_path)
 
     # Creating sequence dataset
